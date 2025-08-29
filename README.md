@@ -16,16 +16,24 @@
 
 ## **插件演示** 
 导航效果 🎥
-
-![]()
+![1756470220397.png](https://free.picui.cn/free/2025/08/29/68b19dcf4573e.png)
+![1756470179981.png](https://free.picui.cn/free/2025/08/29/68b19dd0beeb5.png)
+![1756470046658.png](https://free.picui.cn/free/2025/08/29/68b19dd0703bf.png)
+![1756470278448.png](https://free.picui.cn/free/2025/08/29/68b19dd19ee3c.png)
+![1756470353712.png](https://free.picui.cn/free/2025/08/29/68b19dd2d5f75.png)
+![1756470434337.png](https://free.picui.cn/free/2025/08/29/68b19dd62a476.png)
+![1756470500728.png](https://free.picui.cn/free/2025/08/29/68b19dd91589d.png)
+![1756470561102.png](https://free.picui.cn/free/2025/08/29/68b19dda29a0c.png)
+![1756470582360.png](https://free.picui.cn/free/2025/08/29/68b19ddb243f3.png)
+![1756470656313.png](https://free.picui.cn/free/2025/08/29/68b19ddb872a3.png)
 
 `/toc cd` 打开玩家导航页面 📋
 
-![]()
+![1756470687812.png](https://free.picui.cn/free/2025/08/29/68b19ddba00d2.png)
 
-`/toc admin` 打开管理员菜单 ⚙️
+`/toc admin` actionBar展示 ⚙️
 
-![]()
+![1756470753726.png](https://free.picui.cn/free/2025/08/29/68b19dde37604.png)
 
 
 ---
