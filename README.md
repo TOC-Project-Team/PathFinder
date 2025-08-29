@@ -1,6 +1,5 @@
 # PathFinder 插件文档 ✨  
 
-> 来源：https://www.spigotmc.org/resources/pathfinder-advanced-a-pathfinding-navigation-plugin.128119/ 📌  
 > 版本：面向 Minecraft **1.21** 及以上   
 > 功能：玩家-到-玩家（未来扩展更多目标）异步 A* 寻路 + 实时粒子导航   
 
