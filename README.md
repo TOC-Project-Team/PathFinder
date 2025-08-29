@@ -1,13 +1,14 @@
 # PathFinder Plugin Documentation ✨  
 
 > Version: For Minecraft **1.21** and above   
-> Function: Player-to-player (future expansion to more targets) asynchronous A* pathfinding + real-time particle navigation   
+> Function: Player-to-player (more function will be finished in the future)  
+asynchronous A* pathfinding + real-time particle navigation   
 
 ---
 
 ## **Plugin Introduction**  
-**PathFinder** uses **2000+ lines of A\* code** to help players find the optimal route over theoretically **unlimited distances**, and guides with **particle lines visible only to themselves** in real-time.  
-- Fully **asynchronous** computation, doesn't lag the main thread ⚡  
+**PathFinder** uses **2000+ lines of A\* code** to help players find the optimal route over theoretical **unlimited distances**, and guides with **particle lines visible only to themselves** in real-time.  
+- Fully **asynchronous** computation, won't lag the main thread ⚡  
 - Supports **8 languages with automatic switching** (Simplified/Traditional Chinese, English, German, Russian, Spanish, Portuguese, French) 🌏  
 - Default configuration for **medium to high-spec servers**, low-spec machines can also adapt by downgrading according to examples 
 
@@ -26,11 +27,11 @@ Navigation effect 🎥
 ![1756470582360.png](https://free.picui.cn/free/2025/08/29/68b19ddb243f3.png)
 ![1756470656313.png](https://free.picui.cn/free/2025/08/29/68b19ddb872a3.png)
 
-`/toc cd` Open player navigation page 📋
+`/toc cd` Open player's navigation page 📋
 
 ![1756470687812.png](https://free.picui.cn/free/2025/08/29/68b19ddba00d2.png)
 
-`/toc admin` actionBar display ⚙️
+`/toc admin` display the actionbar ⚙️
 
 ![1756470753726.png](https://free.picui.cn/free/2025/08/29/68b19dde37604.png)
 
@@ -41,30 +42,30 @@ Navigation effect 🎥
 
 | Command | Permission Node | Brief Description |
 |---|---|---|
-| `/toc admin` | `toc.admin` | Open graphical admin menu |
+| `/toc admin` | `toc.admin` | Open admin menu (gui) |
 | `/toc reconfig` | `toc.admin` | Reset configuration file to default |
-| `/toc relang` | `toc.admin` | Reload language files without restart |
-| `/toc reload` | `toc.admin` | Reload the entire plugin |
-| `/toc status` | `toc.admin` | View plugin and server version |
-| `/toc cd` | `toc.cd` | Open player navigation main menu |
+| `/toc relang` | `toc.admin` | Reload language files |
+| `/toc reload` | `toc.admin` | Reload the plugin |
+| `/toc status` | `toc.admin` | View plugin version |
+| `/toc cd` | `toc.cd` | Open player's navigation menu |
 | `/toc nav view [--page=]` | `toc.view` | List all players currently navigating |
 | `/toc lang <language\|reset>` | `toc.lang` | Switch interface language<br>Supports `zh-CN` `zh-TW` `en-US` `de-DE` `es-ES` `fr-FR` `pt-PT` `ru-RU`<br>Set to `reset` to restore default value |
-| `/toc nav add <waypoint name>` | `toc.nav.add` | Create a new waypoint at your feet |
-| `/toc nav go <waypoint name>` | `toc.nav.go` | Navigate yourself to that waypoint |
+| `/toc nav add <waypoint name>` | `toc.nav.add` | Create a new waypoint at your position |
+| `/toc nav go <waypoint name>` | `toc.nav.go` | Navigate yourself to the waypoint |
 | `/toc nav list [--page=] [--world=]` | `toc.nav.list` | View existing waypoints |
 | `/toc nav remove <waypoint name>` | `toc.nav.remove` | Delete a waypoint |
 | `/toc nav rename <old name> <new name>` | `toc.nav.rename` | Rename a waypoint |
 | `/toc nav set <x/y/z/world> <value>` | `toc.nav.set` | Fine-tune waypoint coordinates or world |
 | `/toc nav start <player> <waypoint name>` | `toc.nav.start` | **Admin** force a player to start navigation |
 | `/toc nav stop` | `toc.nav.stop` | Stop **your own** navigation |
-| `/toc nav stop [player]` | `toc.nav.stop.other` | Stop **someone else's** navigation |
+| `/toc nav stop [player]` | `toc.nav.stop.other` | **Admin** Stop **someone else's** navigation |
 
 ---
 
 ## **Configuration File Details**
 
 ###  `config.yml`
-*Plugin main configuration file* 📝
+*Plugin main configuration* 📝
 ```yaml
 # Plugin interface language, zh-CN Simplified Chinese; en-US English; see lang folder for others
 language: zh-CN
@@ -99,19 +100,21 @@ max_block_jump_distance: 4   # Maximum distance for jumping across blocks
 max_safe_fall_height: 4      # Maximum "safe" fall height 
 
 # ========= Performance Options =========
-enable_path_caching: false    # true = reuse old paths to save CPU, but may be slightly slower to respond
+enable_path_caching: false    # true = reuse old paths to lower CPU usage, but may be slightly slower to respond
 ```
 
 ### Low-Spec Server Optimization Example
 - max_search_radius: 200
 - max_iterations: 1000
 - path_refresh_ticks: 30
-Changes to the configuration file will automatically take effect, no need to reload
+
+If you change the configuration, plugin will automatically take effect, no need to reload.
 
 ### Notes
-This plugin is not recommended for high-precision parkour
-Currently only supports ladders and scaffolding for climbing paths
+This plugin is not recommended for high-precision parkour  
+Currently only supports ladders and scaffolding for climbing paths  
 Underwater pathfinding may have abnormalities
+
 ### Official Support
 Discord Community: https://discord.gg/daSchNY7Sr
 Language files: plugins/PathFinder/lang/ can be translated or added by yourself
