@@ -100,6 +100,7 @@ max_safe_fall_height: 4      # Maximum "safe" fall height
 
 # ========= Performance Options =========
 enable_path_caching: false    # true = reuse old paths to save CPU, but may be slightly slower to respond
+```
 
 Low-Spec Server Optimization Example
 max_search_radius: 200
