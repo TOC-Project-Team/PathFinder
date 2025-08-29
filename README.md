@@ -1,20 +1,20 @@
-# PathFinder 插件文档 ✨  
+# PathFinder Plugin Documentation ✨  
 
-> 版本：面向 Minecraft **1.21** 及以上   
-> 功能：玩家-到-玩家（未来扩展更多目标）异步 A* 寻路 + 实时粒子导航   
-
----
-
-## **插件简介**  
-**PathFinder** 用 **2000+ 行 A\* 代码** 帮玩家在理论 **无限距离** 找到最优路线，并以 **仅自己可见的粒子线** 实时指引。  
-- 全程 **异步** 运算，不卡主线程 ⚡  
-- 支持 **8 种语言自动切换** (简/繁中文、英、德、俄、西、葡、法) 🌏  
-- 默认配置面向 **中高配置服务器**，低配机也可按示例降配适应 
+> Version: For Minecraft **1.21** and above   
+> Function: Player-to-player (future expansion to more targets) asynchronous A* pathfinding + real-time particle navigation   
 
 ---
 
-## **插件演示** 
-导航效果 🎥
+## **Plugin Introduction**  
+**PathFinder** uses **2000+ lines of A\* code** to help players find the optimal route over theoretically **unlimited distances**, and guides with **particle lines visible only to themselves** in real-time.  
+- Fully **asynchronous** computation, doesn't lag the main thread ⚡  
+- Supports **8 languages with automatic switching** (Simplified/Traditional Chinese, English, German, Russian, Spanish, Portuguese, French) 🌏  
+- Default configuration for **medium to high-spec servers**, low-spec machines can also adapt by downgrading according to examples 
+
+---
+
+## **Plugin Demonstration** 
+Navigation effect 🎥
 ![1756470220397.png](https://free.picui.cn/free/2025/08/29/68b19dcf4573e.png)
 ![1756470179981.png](https://free.picui.cn/free/2025/08/29/68b19dd0beeb5.png)
 ![1756470046658.png](https://free.picui.cn/free/2025/08/29/68b19dd0703bf.png)
@@ -26,107 +26,202 @@
 ![1756470582360.png](https://free.picui.cn/free/2025/08/29/68b19ddb243f3.png)
 ![1756470656313.png](https://free.picui.cn/free/2025/08/29/68b19ddb872a3.png)
 
-`/toc cd` 打开玩家导航页面 📋
+`/toc cd` Open player navigation page 📋
 
 ![1756470687812.png](https://free.picui.cn/free/2025/08/29/68b19ddba00d2.png)
 
-`/toc admin` actionBar展示 ⚙️
+`/toc admin` actionBar display ⚙️
 
 ![1756470753726.png](https://free.picui.cn/free/2025/08/29/68b19dde37604.png)
 
 
 ---
 
-## **指令与权限速查表**  
+## **Commands and Permissions Quick Reference**  
 
-| 指令 | 权限节点 | 简短描述 |
+| Command | Permission Node | Brief Description |
 |---|---|---|
-| `/toc admin` | `toc.admin` | 打开图形化管理员菜单 |
-| `/toc reconfig` | `toc.admin` | 把配置文件恢复到默认 |
-| `/toc relang` | `toc.admin` | 重载语言文件，无需重启 |
-| `/toc reload` | `toc.admin` | 重载整个插件 |
-| `/toc status` | `toc.admin` | 查看插件、服务器版本 |
-| `/toc cd` | `toc.cd` | 打开玩家用导航主菜单 |
-| `/toc nav view [--page=]` | `toc.view` | 列出当前正在导航的所有玩家 |
-| `/toc lang <语言\|reset>` | `toc.lang` | 切换界面语言<br>支持 `zh-CN` `zh-TW` `en-US` `de-DE` `es-ES` `fr-FR` `pt-PT` `ru-RU`<br>设为`reset`可重置至默认值 |
-| `/toc nav add <路径点名>` | `toc.nav.add` | 在脚下新建一个路径点 |
-| `/toc nav go <路径点名>` | `toc.nav.go` | 自己导航到该路径点 |
-| `/toc nav list [--page=] [--world=]` | `toc.nav.list` | 查看已有路径点 |
-| `/toc nav remove <路径点名>` | `toc.nav.remove` | 删除路径点 |
-| `/toc nav rename <旧名> <新名>` | `toc.nav.rename` | 重命名路径点 |
-| `/toc nav set <x/y/z/world> <值>` | `toc.nav.set` | 微调路径点坐标或世界 |
-| `/toc nav start <玩家> <路径点名>` | `toc.nav.start` | **管理员** 强制让某玩家开始导航 |
-| `/toc nav stop` | `toc.nav.stop` | 停止**自己**的导航 |
-| `/toc nav stop [玩家]` | `toc.nav.stop.other` | 停止**他人**的导航 |
+| `/toc admin` | `toc.admin` | Open graphical admin menu |
+| `/toc reconfig` | `toc.admin` | Reset configuration file to default |
+| `/toc relang` | `toc.admin` | Reload language files without restart |
+| `/toc reload` | `toc.admin` | Reload the entire plugin |
+| `/toc status` | `toc.admin` | View plugin and server version |
+| `/toc cd` | `toc.cd` | Open player navigation main menu |
+| `/toc nav view [--page=]` | `toc.view` | List all players currently navigating |
+| `/toc lang <language\|reset>` | `toc.lang` | Switch interface language<br>Supports `zh-CN` `zh-TW` `en-US` `de-DE` `es-ES` `fr-FR` `pt-PT` `ru-RU`<br>Set to `reset` to restore default value |
+| `/toc nav add <waypoint name>` | `toc.nav.add` | Create a new waypoint at your feet |
+| `/toc nav go <waypoint name>` | `toc.nav.go` | Navigate yourself to that waypoint |
+| `/toc nav list [--page=] [--world=]` | `toc.nav.list` | View existing waypoints |
+| `/toc nav remove <waypoint name>` | `toc.nav.remove` | Delete a waypoint |
+| `/toc nav rename <old name> <new name>` | `toc.nav.rename` | Rename a waypoint |
+| `/toc nav set <x/y/z/world> <value>` | `toc.nav.set` | Fine-tune waypoint coordinates or world |
+| `/toc nav start <player> <waypoint name>` | `toc.nav.start` | **Admin** force a player to start navigation |
+| `/toc nav stop` | `toc.nav.stop` | Stop **your own** navigation |
+| `/toc nav stop [player]` | `toc.nav.stop.other` | Stop **someone else's** navigation |
 
 ---
 
-## **配置文件详解**
+## **Configuration File Details**
 
 ###  `config.yml`
-*插件主配置文件* 📝
+*Plugin main configuration file* 📝
 ```yaml
-# 插件界面语言，zh-CN 简体中文；en-US 英文；其余见 lang 文件夹
+# Plugin interface language, zh-CN Simplified Chinese; en-US English; see lang folder for others
 language: zh-CN
-```
+
+pathfinder.yml
+Pathfinding related configuration<br>Setting costs as negative will encourage the algorithm to choose certain behaviors, but if you really want to encourage certain behaviors<br>a better approach is to lower the positive costs of these behaviors rather than using negative costs ⚠️
+
+# ========= Search Range & Precision =========
+max_search_radius: 3000      # Maximum search distance (blocks) — Low-spec servers change to 100~500
+max_iterations: 4000         # Maximum calculation steps — Low-spec servers change to 1000~2000
+
+# ========= Particle Visual Effects =========
+particle_spacing: 0.5        # Distance between particles (blocks), smaller = denser
+max_particle_distance: 30    # Particle visibility distance, further = more bandwidth usage
+particle_size: 1.0           # Particle size
+path_refresh_ticks: 15       # Path refresh cycle (ticks), 20 ticks = 1 second
+
+# ========= Movement "Costs": Higher numbers = less likely to choose =========
+straight_cost: 1.0           # Walking straight one block 
+diagonal_cost: 1.5           # Walking diagonally one block 
+right_angle_turn_cost: 0.5   # Right angle turn 
+diagonal_turn_cost: 1.0      # Diagonal turn 
+break_block_cost: 100.0      # Breaking blocks (99999 almost prohibits it, 0 allows freely) 
+door_cost: 0.0               # Going through doors (0 means prioritize using doors)
+trapdoor_cost: 6.0           # Going through trapdoors
+jump_cost: 0.0               # Jumping on flat ground
+vertical_cost: 1.0           # Climbing ladders/scaffolds up and down
+scaffolding_cost: 0.0        # Walking on scaffolding 
+fall_cost: 2.0               # Direct free fall
+block_jump_cost: 1.0         # Jumping across blocks
+max_block_jump_distance: 4   # Maximum distance for jumping across blocks
+max_safe_fall_height: 4      # Maximum "safe" fall height 
+
+# ========= Performance Options =========
+enable_path_caching: false    # true = reuse old paths to save CPU, but may be slightly slower to respond
+
+翻译文档
+
+已深度思考
+
+(18.6s)
+
+TEXT
+# PathFinder Plugin Documentation ✨  
+
+> Version: For Minecraft **1.21** and above   
+> Function: Player-to-player (future expansion to more targets) asynchronous A* pathfinding + real-time particle navigation   
 
 ---
 
-###  `pathfinder.yml`
-*寻路相关配置<br>代价设置为负数将鼓励算法选择某行为，但是如果真的想鼓励某些行为<br>更好的方法是降低这些行为的正代价，而不是使用负代价* ⚠️
+## **Plugin Introduction**  
+**PathFinder** uses **2000+ lines of A\* code** to help players find the optimal route over theoretically **unlimited distances**, and guides with **particle lines visible only to themselves** in real-time.  
+- Fully **asynchronous** computation, doesn't lag the main thread ⚡  
+- Supports **8 languages with automatic switching** (Simplified/Traditional Chinese, English, German, Russian, Spanish, Portuguese, French) 🌏  
+- Default configuration for **medium to high-spec servers**, low-spec machines can also adapt by downgrading according to examples 
+
+---
+
+## **Plugin Demonstration** 
+Navigation effect 🎥
+![1756470220397.png](https://free.picui.cn/free/2025/08/29/68b19dcf4573e.png)
+![1756470179981.png](https://free.picui.cn/free/2025/08/29/68b19dd0beeb5.png)
+![1756470046658.png](https://free.picui.cn/free/2025/08/29/68b19dd0703bf.png)
+![1756470278448.png](https://free.picui.cn/free/2025/08/29/68b19dd19ee3c.png)
+![1756470353712.png](https://free.picui.cn/free/2025/08/29/68b19dd2d5f75.png)
+![1756470434337.png](https://free.picui.cn/free/2025/08/29/68b19dd62a476.png)
+![1756470500728.png](https://free.picui.cn/free/2025/08/29/68b19dd91589d.png)
+![1756470561102.png](https://free.picui.cn/free/2025/08/29/68b19dda29a0c.png)
+![1756470582360.png](https://free.picui.cn/free/2025/08/29/68b19ddb243f3.png)
+![1756470656313.png](https://free.picui.cn/free/2025/08/29/68b19ddb872a3.png)
+
+`/toc cd` Open player navigation page 📋
+
+![1756470687812.png](https://free.picui.cn/free/2025/08/29/68b19ddba00d2.png)
+
+`/toc admin` actionBar display ⚙️
+
+![1756470753726.png](https://free.picui.cn/free/2025/08/29/68b19dde37604.png)
+
+
+---
+
+## **Commands and Permissions Quick Reference**  
+
+| Command | Permission Node | Brief Description |
+|---|---|---|
+| `/toc admin` | `toc.admin` | Open graphical admin menu |
+| `/toc reconfig` | `toc.admin` | Reset configuration file to default |
+| `/toc relang` | `toc.admin` | Reload language files without restart |
+| `/toc reload` | `toc.admin` | Reload the entire plugin |
+| `/toc status` | `toc.admin` | View plugin and server version |
+| `/toc cd` | `toc.cd` | Open player navigation main menu |
+| `/toc nav view [--page=]` | `toc.view` | List all players currently navigating |
+| `/toc lang <language\|reset>` | `toc.lang` | Switch interface language<br>Supports `zh-CN` `zh-TW` `en-US` `de-DE` `es-ES` `fr-FR` `pt-PT` `ru-RU`<br>Set to `reset` to restore default value |
+| `/toc nav add <waypoint name>` | `toc.nav.add` | Create a new waypoint at your feet |
+| `/toc nav go <waypoint name>` | `toc.nav.go` | Navigate yourself to that waypoint |
+| `/toc nav list [--page=] [--world=]` | `toc.nav.list` | View existing waypoints |
+| `/toc nav remove <waypoint name>` | `toc.nav.remove` | Delete a waypoint |
+| `/toc nav rename <old name> <new name>` | `toc.nav.rename` | Rename a waypoint |
+| `/toc nav set <x/y/z/world> <value>` | `toc.nav.set` | Fine-tune waypoint coordinates or world |
+| `/toc nav start <player> <waypoint name>` | `toc.nav.start` | **Admin** force a player to start navigation |
+| `/toc nav stop` | `toc.nav.stop` | Stop **your own** navigation |
+| `/toc nav stop [player]` | `toc.nav.stop.other` | Stop **someone else's** navigation |
+
+---
+
+## **Configuration File Details**
+
+###  `config.yml`
+*Plugin main configuration file* 📝
 ```yaml
-# ========= 搜索范围 & 精度 =========
-max_search_radius: 3000      # 最远找多远（格）——低配服改 100~500
-max_iterations: 4000         # 最多算多少步——低配服改 1000~2000
+# Plugin interface language, zh-CN Simplified Chinese; en-US English; see lang folder for others
+language: zh-CN
+pathfinder.yml
+Pathfinding related configuration<br>Setting costs as negative will encourage the algorithm to choose certain behaviors, but if you really want to encourage certain behaviors<br>a better approach is to lower the positive costs of these behaviors rather than using negative costs ⚠️
 
-# ========= 粒子视觉效果 =========
-particle_spacing: 0.5        # 两粒子间距（格），越小越密
-max_particle_distance: 30    # 粒子可见距离，越远越吃带宽
-particle_size: 1.0           # 粒子大小
-path_refresh_ticks: 15       # 路线刷新周期（tick），20 tick=1 秒；越小越灵敏但 CPU 越高 
+YAML
+# ========= Search Range & Precision =========
+max_search_radius: 3000      # Maximum search distance (blocks) — Low-spec servers change to 100~500
+max_iterations: 4000         # Maximum calculation steps — Low-spec servers change to 1000~2000
 
-# ========= 移动「代价」：数字越大越不愿走 =========
-straight_cost: 1.0           # 直走一格 
-diagonal_cost: 1.5           # 斜走一格 
-right_angle_turn_cost: 0.5   # 直角转弯 
-diagonal_turn_cost: 1.0      # 斜角转弯 
-break_block_cost: 100.0      # 破方块（99999 几乎禁止，0 就随便拆） 
-door_cost: 0.0               # 过门（0 表示优先推门）
-trapdoor_cost: 6.0           # 过活板门
-jump_cost: 0.0               # 平地跳跃
-vertical_cost: 1.0           # 爬梯子/脚手架上下
-scaffolding_cost: 0.0        # 走脚手架 
-fall_cost: 2.0               # 直接自由落体
-block_jump_cost: 1.0         # 跨方块跳跃
-max_block_jump_distance: 4   # 最远可跨的方块距离
-max_safe_fall_height: 4      # 最高"安全"下落高度 
+# ========= Particle Visual Effects =========
+particle_spacing: 0.5        # Distance between particles (blocks), smaller = denser
+max_particle_distance: 30    # Particle visibility distance, further = more bandwidth usage
+particle_size: 1.0           # Particle size
+path_refresh_ticks: 15       # Path refresh cycle (ticks), 20 ticks = 1 second
 
-# ========= 性能选项 =========
-enable_path_caching: false    # true = 复用旧路线省 CPU，但可能反应稍慢
-```
+# ========= Movement "Costs": Higher numbers = less likely to choose =========
+straight_cost: 1.0           # Walking straight one block 
+diagonal_cost: 1.5           # Walking diagonally one block 
+right_angle_turn_cost: 0.5   # Right angle turn 
+diagonal_turn_cost: 1.0      # Diagonal turn 
+break_block_cost: 100.0      # Breaking blocks (99999 almost prohibits it, 0 allows freely) 
+door_cost: 0.0               # Going through doors (0 means prioritize using doors)
+trapdoor_cost: 6.0           # Going through trapdoors
+jump_cost: 0.0               # Jumping on flat ground
+vertical_cost: 1.0           # Climbing ladders/scaffolds up and down
+scaffolding_cost: 0.0        # Walking on scaffolding 
+fall_cost: 2.0               # Direct free fall
+block_jump_cost: 1.0         # Jumping across blocks
+max_block_jump_distance: 4   # Maximum distance for jumping across blocks
+max_safe_fall_height: 4      # Maximum "safe" fall height 
 
----
+# ========= Performance Options =========
+enable_path_caching: false    # true = reuse old paths to save CPU, but may be slightly slower to respond
 
-## **低配服务器调优示例**
+Low-Spec Server Optimization Example
+max_search_radius: 200
+max_iterations: 1000
+path_refresh_ticks: 30
+Changes to the configuration file will automatically take effect, no need to reload
 
-1. `max_search_radius: 200` 
-2. `max_iterations: 1000` 
-3. `path_refresh_ticks: 30`  
-
-*改动后配置文件会自动生效，无需reload* 
-
----
-
-### *注意事项*
-- 该插件并 **不推荐** 用于高精度 **跑酷**   
-- 目前对于攀爬路径 **仅** 支持 **梯子** 和 **脚手架** 
-- **水下寻路** 可能会出现异常 
-
----
-
-## **官方支持**
-
-- **Discord 社群**：https://discord.gg/daSchNY7Sr 
-- **语言文件**：plugins/PathFinder/lang/ 可自行翻译或新增 
-
-祝使用愉快！ 🎉
+Notes
+This plugin is not recommended for high-precision parkour
+Currently only supports ladders and scaffolding for climbing paths
+Underwater pathfinding may have abnormalities
+Official Support
+Discord Community: https://discord.gg/daSchNY7Sr
+Language files: plugins/PathFinder/lang/ can be translated or added by yourself
+Enjoy using it! 🎉
