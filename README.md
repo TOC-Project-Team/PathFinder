@@ -102,17 +102,18 @@ max_safe_fall_height: 4      # Maximum "safe" fall height
 enable_path_caching: false    # true = reuse old paths to save CPU, but may be slightly slower to respond
 ```
 
-Low-Spec Server Optimization Example
-max_search_radius: 200
-max_iterations: 1000
-path_refresh_ticks: 30
+### Low-Spec Server Optimization Example
+- max_search_radius: 200
+- max_iterations: 1000
+- path_refresh_ticks: 30
 Changes to the configuration file will automatically take effect, no need to reload
 
-Notes
+### Notes
 This plugin is not recommended for high-precision parkour
 Currently only supports ladders and scaffolding for climbing paths
 Underwater pathfinding may have abnormalities
-Official Support
+### Official Support
 Discord Community: https://discord.gg/daSchNY7Sr
 Language files: plugins/PathFinder/lang/ can be translated or added by yourself
+
 Enjoy using it! 🎉
