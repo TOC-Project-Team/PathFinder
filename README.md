@@ -65,13 +65,13 @@ Navigation effect 🎥
 ## **Configuration File Details**
 
 ###  `config.yml`
-*Plugin main configuration* 📝
+> *Plugin main configuration* 📝
 ```yaml
 # Plugin UI language, zh-CN Simplified Chinese; en-US English; see lang folder for others
 language: zh-CN
 ```
 ### `pathfinder.yml`
-> Pathfinding related configuration  
+> *Pathfinding related configuration* 📝  
 - Setting costs as negative will encourage the algorithm to choose certain behaviors, but if you really want to encourage certain behaviors  
 - a better approach is to lower the positive costs of these behaviors rather than using negative costs ⚠️  
 ```yaml
