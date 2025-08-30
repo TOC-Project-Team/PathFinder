@@ -1,16 +1,16 @@
 # PathFinder Plugin Documentation ✨  
 
-> Version: For Minecraft **1.21** and above   
-> Function: Player-to-player (more function will be finished in the future)  
-asynchronous A* pathfinding + real-time particle navigation   
+> Version: For Minecraft **1.21** and above 🚀  
+> Function: Player-to-player (more targets planned for future) 📌  
+> asynchronous A* pathfinding + real-time particle navigation 🧭   
 
 ---
 
 ## **Plugin Introduction**  
 **PathFinder** uses **2000+ lines of A\* code** to help players find the optimal route over theoretical **unlimited distances**, and guides with **particle lines visible only to themselves** in real-time.  
-- Fully **asynchronous** computation, won't lag the main thread ⚡  
-- Supports **8 languages with automatic switching** (Simplified/Traditional Chinese, English, German, Russian, Spanish, Portuguese, French) 🌏  
-- Default configuration for **medium to high-spec servers**, low-spec machines can also adapt by downgrading according to examples 
+- Fully **asynchronous** computation, not lagging the main thread ⚡
+- Supports **8 languages** with auto-switching (Simplified/Traditional Chinese, English, German, Russian, Spanish, Portuguese, French) 🌏
+- Default configuration needs **mid-to-high spec** servers; low-spec machines can also adapt by downgrading according to examples 🛠️
 
 ---
 
@@ -31,7 +31,7 @@ Navigation effect 🎥
 
 ![1756470687812.png](https://free.picui.cn/free/2025/08/29/68b19ddba00d2.png)
 
-`/toc admin` display the actionbar ⚙️
+`/toc admin` Open admin menu (gui) ⚙️
 
 ![1756470753726.png](https://free.picui.cn/free/2025/08/29/68b19dde37604.png)
 
@@ -42,23 +42,23 @@ Navigation effect 🎥
 
 | Command | Permission Node | Brief Description |
 |---|---|---|
-| `/toc admin` | `toc.admin` | Open admin menu (gui) |
-| `/toc reconfig` | `toc.admin` | Reset configuration file to default |
-| `/toc relang` | `toc.admin` | Reload language files |
-| `/toc reload` | `toc.admin` | Reload the plugin |
-| `/toc status` | `toc.admin` | View plugin version |
-| `/toc cd` | `toc.cd` | Open player's navigation menu |
-| `/toc nav view [--page=]` | `toc.view` | List all players currently navigating |
-| `/toc lang <language\|reset>` | `toc.lang` | Switch interface language<br>Supports `zh-CN` `zh-TW` `en-US` `de-DE` `es-ES` `fr-FR` `pt-PT` `ru-RU`<br>Set to `reset` to restore default value |
-| `/toc nav add <waypoint name>` | `toc.nav.add` | Create a new waypoint at your position |
-| `/toc nav go <waypoint name>` | `toc.nav.go` | Navigate yourself to the waypoint |
-| `/toc nav list [--page=] [--world=]` | `toc.nav.list` | View existing waypoints |
-| `/toc nav remove <waypoint name>` | `toc.nav.remove` | Delete a waypoint |
-| `/toc nav rename <old name> <new name>` | `toc.nav.rename` | Rename a waypoint |
-| `/toc nav set <x/y/z/world> <value>` | `toc.nav.set` | Fine-tune waypoint coordinates or world |
-| `/toc nav start <player> <waypoint name>` | `toc.nav.start` | **Admin** force a player to start navigation |
-| `/toc nav stop` | `toc.nav.stop` | Stop **your own** navigation |
-| `/toc nav stop [player]` | `toc.nav.stop.other` | **Admin** Stop **someone else's** navigation |
+| `/toc admin` | `toc.admin` | Open admin menu (gui) 🖥️ |
+| `/toc reconfig` | `toc.admin` | Restore configs to default 🔧 |
+| `/toc relang` | `toc.admin` | Reload language files 🔄 |
+| `/toc reload` | `toc.admin` | Reload plugin 🔄 |
+| `/toc status` | `toc.admin` | View plugin's info 📊 |
+| `/toc cd` | `toc.cd` | Open navigation menu 🧭 |
+| `/toc nav view [--page=]` | `toc.view` | List all players currently navigating 👥 |
+| `/toc lang <language\|reset>` | `toc.lang` | Switch UI language<br>Supports `zh-CN` `zh-TW` `en-US` `de-DE` `es-ES` `fr-FR` `pt-PT` `ru-RU`<br>Set to `reset` to revert to default 🌐 |
+| `/toc nav add <waypoint name>` | `toc.nav.add` | Create a new waypoint at your position 📍 |
+| `/toc nav go <waypoint name>` | `toc.nav.go` | Navigate yourself to the waypoint 🚶 |
+| `/toc nav list [--page=] [--world=]` | `toc.nav.list` | View existing waypoints 📋 |
+| `/toc nav remove <waypoint name>` | `toc.nav.remove` | Delete a waypoint 🗑️ |
+| `/toc nav rename <old name> <new name>` | `toc.nav.rename` | Rename a waypoint ✏️ |
+| `/toc nav set <x/y/z/world> <value>` | `toc.nav.set` | Fine-tune waypoint coordinates or world 🎯 |
+| `/toc nav start <player> <waypoint name>` | `toc.nav.start` | **Admin** force a player to start navigation 👮 |
+| `/toc nav stop` | `toc.nav.stop` | Stop **your own** navigation 🛑 |
+| `/toc nav stop [player]` | `toc.nav.stop.other` | **Admin** Stop **another player's** navigation 🛑 |
 
 ---
 
@@ -67,12 +67,14 @@ Navigation effect 🎥
 ###  `config.yml`
 *Plugin main configuration* 📝
 ```yaml
-# Plugin interface language, zh-CN Simplified Chinese; en-US English; see lang folder for others
+# Plugin UI language, zh-CN Simplified Chinese; en-US English; see lang folder for others
 language: zh-CN
-
-pathfinder.yml
-Pathfinding related configuration<br>Setting costs as negative will encourage the algorithm to choose certain behaviors, but if you really want to encourage certain behaviors<br>a better approach is to lower the positive costs of these behaviors rather than using negative costs ⚠️
-
+```
+### `pathfinder.yml`
+> Pathfinding related configuration  
+- Setting costs as negative will encourage the algorithm to choose certain behaviors, but if you really want to encourage certain behaviors  
+- a better approach is to lower the positive costs of these behaviors rather than using negative costs ⚠️  
+```yaml
 # ========= Search Range & Precision =========
 max_search_radius: 3000      # Maximum search distance (blocks) — Low-spec servers change to 100~500
 max_iterations: 4000         # Maximum calculation steps — Low-spec servers change to 1000~2000
@@ -100,7 +102,7 @@ max_block_jump_distance: 4   # Maximum distance for jumping across blocks
 max_safe_fall_height: 4      # Maximum "safe" fall height 
 
 # ========= Performance Options =========
-enable_path_caching: false    # true = reuse old paths to lower CPU usage, but may be slightly slower to respond
+enable_path_caching: false    # true = reuse old paths to lower CPU usage, but might react slightly slower
 ```
 
 ### Low-Spec Server Optimization Example
@@ -108,15 +110,16 @@ enable_path_caching: false    # true = reuse old paths to lower CPU usage, but m
 - max_iterations: 1000
 - path_refresh_ticks: 30
 
-If you change the configuration, plugin will automatically take effect, no need to reload.
+Changes take effect automatically after you save the config, no reload needed.
 
 ### Notes
-This plugin is not recommended for high-precision parkour  
-Currently only supports ladders and scaffolding for climbing paths  
-Underwater pathfinding may have abnormalities
+This plugin is **not recommended** for high-precision parkour 🏃‍♂️  
+Currently, climbing paths only support ladders and scaffolding 🪜  
+Underwater pathfinding might behave abnormally 🌊
 
 ### Official Support
-Discord Community: [https://discord.gg/daSchNY7Sr](https://discord.gg/daSchNY7Sr)  
-Language files: plugins/PathFinder/lang/ can be translated or added by yourself
+Discord Community: [https://discord.gg/daSchNY7Sr](https://discord.gg/daSchNY7Sr) 💬  
+Language files: plugins/PathFinder/lang/ can be translated or added by yourself 🌍  
+Please let the name of lang file follow `RFC 1766` standard (such as zh-CN) 🌍
 
 Enjoy using it! 🎉
