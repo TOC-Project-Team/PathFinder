@@ -15,7 +15,7 @@ asynchronous A* pathfinding + real-time particle navigation
 ---
 
 ## **Plugin Demonstration** 
-Navigation effect 🎥
+Navigation effect 🎥  
 ![1756470220397.png](https://free.picui.cn/free/2025/08/29/68b19dcf4573e.png)
 ![1756470179981.png](https://free.picui.cn/free/2025/08/29/68b19dd0beeb5.png)
 ![1756470046658.png](https://free.picui.cn/free/2025/08/29/68b19dd0703bf.png)
@@ -116,7 +116,7 @@ Currently only supports ladders and scaffolding for climbing paths
 Underwater pathfinding may have abnormalities
 
 ### Official Support
-Discord Community: https://discord.gg/daSchNY7Sr
+Discord Community: [https://discord.gg/daSchNY7Sr](https://discord.gg/daSchNY7Sr)  
 Language files: plugins/PathFinder/lang/ can be translated or added by yourself
 
 Enjoy using it! 🎉
