@@ -11,23 +11,48 @@ echo "=========================================="
 
 START_TIME=$(date +%s)
 
-if [[ -z "${JAVA_HOME:-}" ]]; then
-    echo "⚠️  JAVA_HOME is not set, attempting auto-detection..."
-    if command -v java >/dev/null 2>&1; then
-        JAVA_BIN="$(readlink -f "$(command -v java)")"
+java_major_version() {
+    "$1" -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -n 1
+}
+
+find_java_21() {
+    local candidate
+
+    if [[ -x /usr/libexec/java_home ]]; then
+        candidate="$(/usr/libexec/java_home -v 21 2>/dev/null || true)/bin/java"
+        if [[ -x "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    fi
+
+    for candidate in /usr/lib/jvm/*21*/bin/java; do
+        if [[ -x "${candidate}" ]] && [[ "$(java_major_version "${candidate}")" == "21" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+JAVA_BIN="${JAVA_HOME:-}/bin/java"
+if [[ ! -x "${JAVA_BIN}" ]] || [[ "$(java_major_version "${JAVA_BIN}")" != "21" ]]; then
+    echo "⚠️  Locating a Java 21 runtime for the Gradle build..."
+    if JAVA_BIN="$(find_java_21)"; then
         JAVA_HOME="$(dirname "$(dirname "${JAVA_BIN}")")"
         export JAVA_HOME
-        echo "✅ Automatically set JAVA_HOME: ${JAVA_HOME}"
+        echo "✅ Using Java 21: ${JAVA_HOME}"
     else
-        echo "❌ Java was not found. Install JDK 21+ or set JAVA_HOME manually."
+        echo "❌ Java 21 was not found. Install JDK 21 or set JAVA_HOME to its installation directory."
         exit 1
     fi
 else
-    echo "✅ JAVA_HOME is set: ${JAVA_HOME}"
+    echo "✅ Using Java 21 from JAVA_HOME: ${JAVA_HOME}"
 fi
 
 echo "🔍 Checking Java version..."
-java -version 2>&1 | head -1
+"${JAVA_BIN}" -version 2>&1 | head -1
 
 echo "🧹 Cleaning stray .class files..."
 find "${PROJECT_ROOT}" -type f -name "*.class" \

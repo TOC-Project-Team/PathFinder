@@ -1,5 +1,5 @@
 name: PathFinder
-version: '1.6.0'
+version: '1.7.0'
 main: org.momu.pathfinder.bootstrap.PathFinderPlugin
 api-version: '1.21'
 folia-supported: true

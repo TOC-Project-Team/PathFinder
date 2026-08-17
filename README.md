@@ -157,7 +157,7 @@ This script:
 The main artifact produced by `./scripts/build-fatjar.sh` is written to:
 
 ```text
-.gradle-build/libs/PathFinder-1.6.0-all.jar
+.gradle-build/libs/PathFinder-1.7.0-all.jar
 ```
 
 The script resolves the final file from `.gradle-build/libs/*-all.jar`, so the exact filename follows the version declared in `build.gradle`.
