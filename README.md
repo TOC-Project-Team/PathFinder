@@ -109,7 +109,6 @@ fall_cost: 2.0
 block_jump_cost: 1.0
 max_block_jump_distance: 4
 max_safe_fall_height: 4
-enable_path_caching: false
 ```
 
 Tuning notes:
@@ -118,7 +117,7 @@ Tuning notes:
 - Larger `max_iterations` improves accuracy at a higher CPU and memory cost.
 - Smaller `particle_spacing` creates denser particle lines.
 - Larger `max_particle_distance` increases client-facing visibility and bandwidth usage.
-- Setting `enable_path_caching` to `true` reduces recomputation but can make routes less reactive.
+- Every refresh recalculates the route from the current world state, so newly opened lower-cost routes can be detected without stale path reuse.
 
 ### Low-Spec Server Optimization Example
 

@@ -18,29 +18,27 @@ public class Pathfinder {
     }
 
     public static void clearBannerCache() {
-        BANNER_CACHE.clear();
-        PathFinderPlugin plugin = PathFinderPlugin.getInstance();
-    }
-
-    public static boolean isPathCachingEnabled() {
-        return PathfinderConfig.ENABLE_PATH_CACHING;
+        // Material classifications are immutable for the lifetime of the server.
     }
 
     public static int getMaxSearchRadius() {
         return PathfinderConfig.MAX_SEARCH_RADIUS;
     }
 
-    private static final Map<String, Boolean> STRING_CONTAINS_CACHE = new HashMap<>();
-    private static final Map<String, String> LOCATION_KEY_CACHE = new HashMap<>(1000);
-    private static final Map<Location, Boolean> SAFE_LOCATION_CACHE = new LinkedHashMap<Location, Boolean>(500, 0.75f,
-            true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<Location, Boolean> eldest) {
-            return size() > 500;
-        }
-    };
-
     private static final Set<Material> OBSTACLES = new HashSet<>();
+    private static final int[] MOVE_DX = { 0, 1, -1, 0, 1, -1, 1, -1, 0 };
+    private static final int[] MOVE_DZ = { 1, 0, 0, -1, 1, 1, -1, -1, 0 };
+    private static final int[] JUMP_DX = { 0, 1, -1, 0 };
+    private static final int[] JUMP_DZ = { 1, 0, 0, -1 };
+    private static final int[][] HAZARD_DIRECTIONS = {
+            { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 }
+    };
+    private static final boolean[] DOOR_TYPES = new boolean[Material.values().length];
+    private static final boolean[] TRAPDOOR_TYPES = new boolean[Material.values().length];
+    private static final boolean[] IRON_TRAPDOOR_TYPES = new boolean[Material.values().length];
+    private static final boolean[] BANNER_TYPES = new boolean[Material.values().length];
+    private static final boolean[] LADDER_TYPES = new boolean[Material.values().length];
+    private static final boolean[] SCAFFOLDING_TYPES = new boolean[Material.values().length];
 
     static {
         OBSTACLES.add(Material.CACTUS);
@@ -49,6 +47,17 @@ public class Pathfinder {
         OBSTACLES.add(Material.VINE);
         OBSTACLES.add(Material.POWDER_SNOW);
         OBSTACLES.add(Material.POINTED_DRIPSTONE);
+
+        for (Material material : Material.values()) {
+            String name = material.name();
+            int ordinal = material.ordinal();
+            DOOR_TYPES[ordinal] = name.contains("DOOR");
+            TRAPDOOR_TYPES[ordinal] = name.contains("TRAPDOOR");
+            IRON_TRAPDOOR_TYPES[ordinal] = name.contains("IRON_TRAPDOOR");
+            BANNER_TYPES[ordinal] = name.contains("BANNER");
+            LADDER_TYPES[ordinal] = name.contains("LADDER");
+            SCAFFOLDING_TYPES[ordinal] = name.contains("SCAFFOLDING");
+        }
     }
 
     public static final int MOVE_HORIZONTAL = 0;
@@ -57,6 +66,7 @@ public class Pathfinder {
     public static final int MOVE_JUMP = 3;
     public static final int MOVE_FALL = 4;
     public static final int MOVE_BLOCK_JUMP = 5;
+    public static final int MOVE_WATER_SURFACE = 6;
 
     public static boolean isPlayerInAir(Player player) {
         if (player == null) return false;
@@ -108,62 +118,107 @@ public class Pathfinder {
         return isBreakable(block.getLocation(), player);
     }
 
+    private static List<Location> addBlockToBreak(List<Location> blocksToBreak, Block block) {
+        Location blockLocation = block.getLocation();
+        if (blocksToBreak == null) {
+            blocksToBreak = new ArrayList<>(3);
+        } else if (blocksToBreak.contains(blockLocation)) {
+            return blocksToBreak;
+        }
+        blocksToBreak.add(blockLocation);
+        return blocksToBreak;
+    }
+
+    /**
+     * Checks the complete player volume while entering a lower block column.
+     * The departure cell only needs the player's normal two-block clearance,
+     * but the landing column must also be clear one block above the player's
+     * head so the player can finish the descent.
+     */
+    private static DescentClearance collectDescentClearance(
+            Location currentLocation, Location nextLocation, Player player, List<Location> blocksToBreak) {
+        int lowestRequiredY = nextLocation.getBlockY();
+        int highestRequiredY = Math.max(
+                currentLocation.getBlockY() + 1,
+                nextLocation.getBlockY() + 2
+        );
+
+        for (int blockY = lowestRequiredY; blockY <= highestRequiredY; blockY++) {
+            Block block = nextLocation.getWorld().getBlockAt(
+                    nextLocation.getBlockX(), blockY, nextLocation.getBlockZ());
+            if (isPassableForDescent(block)) {
+                continue;
+            }
+            if (!shouldBreakBlock(block, player)) {
+                return DescentClearance.blocked();
+            }
+            blocksToBreak = addBlockToBreak(blocksToBreak, block);
+        }
+
+        return DescentClearance.clear(blocksToBreak);
+    }
+
+    private static boolean isPassableForDescent(Block block) {
+        Material type = block.getType();
+        String typeName = type.name();
+
+        if (OBSTACLES.contains(type) || containsWithCache(typeName, "LAVA") || containsWithCache(typeName, "FIRE")) {
+            return false;
+        }
+
+        return block.isPassable()
+                || isDoorPassable(block)
+                || isBannerPassable(block)
+                || isTrapdoorPassable(block)
+                || isLadder(block)
+                || isScaffolding(block)
+                || isFenceGate(block)
+                || containsWithCache(typeName, "WATER")
+                || isLowBlockButNotStair(block);
+    }
+
+    private static final class DescentClearance {
+        private final boolean clear;
+        private final List<Location> blocksToBreak;
+
+        private DescentClearance(boolean clear, List<Location> blocksToBreak) {
+            this.clear = clear;
+            this.blocksToBreak = blocksToBreak;
+        }
+
+        private static DescentClearance clear(List<Location> blocksToBreak) {
+            return new DescentClearance(true, blocksToBreak);
+        }
+
+        private static DescentClearance blocked() {
+            return new DescentClearance(false, null);
+        }
+    }
+
     public static List<Node> findPath(Location start, Location end, Player player) {
-        SAFE_LOCATION_CACHE.clear();
-        LOCATION_KEY_CACHE.clear();
-
+        SearchContext context = new SearchContext();
         Location endLoc = end.getBlock().getLocation();
-        PriorityQueue<Node> openSet = new PriorityQueue<>((n1, n2) -> {
-            int fCompare = Double.compare(n1.f, n2.f);
-            if (fCompare != 0)
-                return fCompare;
-
-            int gCompare = Double.compare(n2.g, n1.g);
-            if (gCompare != 0)
-                return gCompare;
-
-            int xCompare = Integer.compare(n1.location.getBlockX(), n2.location.getBlockX());
-            if (xCompare != 0)
-                return xCompare;
-
-            int zCompare = Integer.compare(n1.location.getBlockZ(), n2.location.getBlockZ());
-            if (zCompare != 0)
-                return zCompare;
-
-            return Integer.compare(n1.location.getBlockY(), n2.location.getBlockY());
-        });
-        Map<String, Node> allNodes = new HashMap<>(1000);
-        Set<String> closedSet = new HashSet<>(1000);
+        IndexedOpenSet openSet = new IndexedOpenSet(1024);
 
         Location startLoc = start.getBlock().getLocation();
 
-        double startHeuristic = heuristic(startLoc, endLoc);
+        double startHeuristic = heuristic(startLoc, endLoc, context);
 
         Node startNode = new Node(startLoc, null, 0, startHeuristic, false);
         openSet.add(startNode);
-        allNodes.put(locationKey(startLoc), startNode);
+        context.addNode(coordinateKey(startLoc), startNode);
 
         int iterations = 0;
-        double targetDistance = 1.0;
-        double maxSearchRadiusSq = PathfinderConfig.MAX_SEARCH_RADIUS * PathfinderConfig.MAX_SEARCH_RADIUS;
-        double earlyExitDistanceSq = 1.0;
+        double maxSearchRadiusSq = (double) PathfinderConfig.MAX_SEARCH_RADIUS
+                * PathfinderConfig.MAX_SEARCH_RADIUS;
 
         while (!openSet.isEmpty() && iterations < PathfinderConfig.MAX_ITERATIONS) {
             iterations++;
             Node current = openSet.poll();
-            String currentKey = locationKey(current.location);
-
-            if (closedSet.contains(currentKey)) {
-                continue;
-            }
-            closedSet.add(currentKey);
+            current.closed = true;
 
             double distanceToEnd = current.location.distanceSquared(endLoc);
-            if (distanceToEnd < targetDistance * targetDistance) {
-                return reconstructPath(current);
-            }
-
-            if (distanceToEnd < earlyExitDistanceSq) {
+            if (distanceToEnd < 1.0) {
                 return reconstructPath(current);
             }
 
@@ -171,19 +226,16 @@ public class Pathfinder {
                 continue;
             }
 
-            int[] dx = { 0, 1, -1, 0, 1, -1, 1, -1, 0 };
-            int[] dz = { 1, 0, 0, -1, 1, 1, -1, -1, 0 };
-
-            for (int i = 0; i < dx.length; i++) {
-                if (dx[i] != 0 && dz[i] != 0) {
-                    Location side1 = current.location.clone().add(dx[i], 0, 0);
-                    Location side2 = current.location.clone().add(0, 0, dz[i]);
-                    Location diagonal = current.location.clone().add(dx[i], 0, dz[i]);
+            for (int i = 0; i < MOVE_DX.length; i++) {
+                if (MOVE_DX[i] != 0 && MOVE_DZ[i] != 0) {
+                    Location side1 = current.location.clone().add(MOVE_DX[i], 0, 0);
+                    Location side2 = current.location.clone().add(0, 0, MOVE_DZ[i]);
+                    Location diagonal = current.location.clone().add(MOVE_DX[i], 0, MOVE_DZ[i]);
                     Location head1 = side1.clone().add(0, 1, 0);
                     Location head2 = side2.clone().add(0, 1, 0);
                     Location diagHead = diagonal.clone().add(0, 1, 0);
 
-                    if (!isSafe(side1) || !isSafe(side2) || !isSafe(diagonal) ||
+                    if (!isSafe(side1, context) || !isSafe(side2, context) || !isSafe(diagonal, context) ||
                             (!head1.getBlock().isPassable() && !isDoor(head1.getBlock()) && !isBanner(head1.getBlock()))
                             ||
                             (!head2.getBlock().isPassable() && !isDoor(head2.getBlock()) && !isBanner(head2.getBlock()))
@@ -194,9 +246,9 @@ public class Pathfinder {
                     }
                 }
                 int minYOffset = -1;
-                if (dx[i] == 0 && dz[i] == 0) {
+                if (MOVE_DX[i] == 0 && MOVE_DZ[i] == 0) {
                     minYOffset = -PathfinderConfig.MAX_SAFE_FALL_HEIGHT;
-                } else if (Math.abs(dx[i]) <= 1 && Math.abs(dz[i]) <= 1) {
+                } else if (Math.abs(MOVE_DX[i]) <= 1 && Math.abs(MOVE_DZ[i]) <= 1) {
                     minYOffset = -2;
                 }
 
@@ -207,21 +259,23 @@ public class Pathfinder {
                 Location tempLoc = current.location.clone();
 
                 for (int yOffset = minYOffset; yOffset <= 1; yOffset++) {
-                    tempLoc.setX(current.location.getX() + dx[i]);
+                    tempLoc.setX(current.location.getX() + MOVE_DX[i]);
                     tempLoc.setY(current.location.getY() + yOffset);
-                    tempLoc.setZ(current.location.getZ() + dz[i]);
+                    tempLoc.setZ(current.location.getZ() + MOVE_DZ[i]);
                     Location nextLocation = tempLoc.clone();
-                    String nextKey = locationKey(nextLocation);
+                    long nextKey = coordinateKey(nextLocation);
+                    Node existingNode = context.nodes.get(nextKey);
 
-                    if (closedSet.contains(nextKey)) {
+                    if (existingNode != null && existingNode.closed) {
                         continue;
                     }
 
                     boolean toBreak = false;
+                    List<Location> blocksToBreak = null;
                     int moveType;
 
                     if (yOffset > 0) {
-                        if (dx[i] != 0 || dz[i] != 0) {
+                        if (MOVE_DX[i] != 0 || MOVE_DZ[i] != 0) {
                             moveType = MOVE_JUMP;
                         } else {
                             moveType = MOVE_UP;
@@ -235,7 +289,6 @@ public class Pathfinder {
                     // Height space checks based on move type
                     Block nextHead = nextLocation.getBlock().getRelative(0, 1, 0);
                     Block nextCeiling = nextLocation.getBlock().getRelative(0, 2, 0);
-                    Block nextAbove = nextLocation.getBlock().getRelative(0, 3, 0);
 
                     int currentHeight = current.location.getBlockY();
                     int nextHeight = nextLocation.getBlockY();
@@ -252,6 +305,7 @@ public class Pathfinder {
                                     && !isTrapdoorPassable(nextHead)) {
                                 if (shouldBreakBlock(nextHead, player)) {
                                     toBreak = true;
+                                    blocksToBreak = addBlockToBreak(blocksToBreak, nextHead);
                                 } else {
                                     continue;
                                 }
@@ -260,44 +314,15 @@ public class Pathfinder {
                     }
 
                     if (moveType == MOVE_DOWN) {
-                        boolean currentIsScaffolding = isScaffolding(current.location.getBlock());
-                        boolean nextIsScaffolding = isScaffolding(nextLocation.getBlock());
-
-                        if (!(currentIsScaffolding && nextIsScaffolding)) {
-                            if (!nextHead.isPassable() && nextHead.getType().isSolid() &&
-                                    !isDoor(nextHead) && !isBanner(nextHead) && !isIronTrapdoor(nextHead)
-                                    && !isScaffolding(nextHead)) {
-                                if (shouldBreakBlock(nextHead, player)) {
-                                    toBreak = true;
-                                } else {
-                                    continue;
-                                }
-                            }
-                            if (!nextCeiling.isPassable() && nextCeiling.getType().isSolid() &&
-                                    !isDoor(nextCeiling) && !isBanner(nextCeiling) && !isIronTrapdoor(nextCeiling)
-                                    && !isScaffolding(nextCeiling)) {
-                                if (shouldBreakBlock(nextCeiling, player)) {
-                                    toBreak = true;
-                                } else {
-                                    continue;
-                                }
-                            }
-                        }
-                        if (!nextAbove.isPassable() && nextAbove.getType().isSolid() &&
-                                !isDoor(nextAbove) && !isBanner(nextAbove) && !isIronTrapdoor(nextAbove)) {
-                            if (shouldBreakBlock(nextAbove, player)) {
-                                toBreak = true;
-                            } else {
-                                continue;
-                            }
-                        }
-
-                        Block targetBlock = nextLocation.getBlock();
-                        if (!isLowBlockButNotStair(targetBlock) && shouldBreakBlock(targetBlock, player)) {
-                            toBreak = true;
-                        }
-
                         int fallHeight = current.location.getBlockY() - nextLocation.getBlockY();
+
+                        DescentClearance descentClearance = collectDescentClearance(
+                                current.location, nextLocation, player, blocksToBreak);
+                        if (!descentClearance.clear) {
+                            continue;
+                        }
+                        blocksToBreak = descentClearance.blocksToBreak;
+                        toBreak = blocksToBreak != null && !blocksToBreak.isEmpty();
 
                         boolean targetInWater = isInWater(nextLocation);
                         if (fallHeight > PathfinderConfig.MAX_SAFE_FALL_HEIGHT && targetInWater) {
@@ -305,15 +330,16 @@ public class Pathfinder {
                         }
 
                         if (fallHeight > PathfinderConfig.MAX_SAFE_FALL_HEIGHT) {
-                            if (Math.abs(dx[i]) <= 1 && Math.abs(dz[i]) <= 1) {
-                                int blocksToBreak = fallHeight - PathfinderConfig.MAX_SAFE_FALL_HEIGHT;
+                            if (Math.abs(MOVE_DX[i]) <= 1 && Math.abs(MOVE_DZ[i]) <= 1) {
+                                int breakDepth = fallHeight - PathfinderConfig.MAX_SAFE_FALL_HEIGHT;
                                 boolean canBreak = true;
-                                for (int j = 1; j <= blocksToBreak; j++) {
+                                for (int j = 1; j <= breakDepth; j++) {
                                     Block blockBelow = current.location.getBlock().getRelative(0, -j, 0);
                                     if (!isBreakable(blockBelow.getLocation(), player)) {
                                         canBreak = false;
                                         break;
                                     }
+                                    blocksToBreak = addBlockToBreak(blocksToBreak, blockBelow);
                                 }
                                 if (canBreak) {
                                     toBreak = true;
@@ -346,6 +372,7 @@ public class Pathfinder {
                                     && !isScaffolding(nextHead)) {
                                 if (shouldBreakBlock(nextHead, player)) {
                                     toBreak = true;
+                                    blocksToBreak = addBlockToBreak(blocksToBreak, nextHead);
                                 } else {
                                     continue;
                                 }
@@ -355,6 +382,7 @@ public class Pathfinder {
                                     && !isScaffolding(nextCeiling)) {
                                 if (shouldBreakBlock(nextCeiling, player)) {
                                     toBreak = true;
+                                    blocksToBreak = addBlockToBreak(blocksToBreak, nextCeiling);
                                 } else {
                                     continue;
                                 }
@@ -366,6 +394,7 @@ public class Pathfinder {
                                 !isDoor(currentFeet) && !isBanner(currentFeet) && !isIronTrapdoor(currentFeet)) {
                             if (shouldBreakBlock(currentFeet, player)) {
                                 toBreak = true;
+                                blocksToBreak = addBlockToBreak(blocksToBreak, currentFeet);
                             } else {
                                 continue;
                             }
@@ -437,40 +466,19 @@ public class Pathfinder {
                                 && !isFenceGate(nextHead) && !isLowBlock(nextHead)) {
                             if (shouldBreakBlock(nextHead, player)) {
                                 toBreak = true;
+                                blocksToBreak = addBlockToBreak(blocksToBreak, nextHead);
                             } else {
                                 continue;
                             }
                         }
 
-                        if (nextHead.isPassable() || isDoorPassable(nextHead) || isBannerPassable(nextHead) ||
-                                isTrapdoorPassable(nextHead) || nextHead.getType().name().contains("WATER")) {
-                            if (!nextCeiling.isPassable() && nextCeiling.getType().isSolid() &&
-                                    !isDoor(nextCeiling) && !isBanner(nextCeiling) && !isIronTrapdoor(nextCeiling)) {
-                                if (shouldBreakBlock(nextCeiling, player)) {
-                                    toBreak = true;
-                                } else {
-                                    continue;
-                                }
-                            }
-                        } else {
-                            if (!nextCeiling.isPassable() && nextCeiling.getType().isSolid() && !isDoor(nextCeiling)
-                                    && !isBanner(nextCeiling) && !isTrapdoorPassable(nextCeiling)) {
-                                if (shouldBreakBlock(nextCeiling, player)) {
-                                    toBreak = true;
-                                } else {
-                                    continue;
-                                }
-                            }
-                        }
-
                         Block currentHead = current.location.getBlock().getRelative(0, 1, 0);
                         Block currentCeiling = current.location.getBlock().getRelative(0, 2, 0);
-                        Block currentAbove = current.location.getBlock().getRelative(0, 3, 0);
-
                         if (!currentHead.isPassable() && currentHead.getType().isSolid() &&
                                 !isDoor(currentHead) && !isBanner(currentHead) && !isIronTrapdoor(currentHead)) {
                             if (shouldBreakBlock(currentHead, player)) {
                                 toBreak = true;
+                                blocksToBreak = addBlockToBreak(blocksToBreak, currentHead);
                             } else {
                                 continue;
                             }
@@ -481,15 +489,7 @@ public class Pathfinder {
                                 && !isIronTrapdoor(currentCeiling)) {
                             if (shouldBreakBlock(currentCeiling, player)) {
                                 toBreak = true;
-                            } else {
-                                continue;
-                            }
-                        }
-
-                        if (!currentAbove.isPassable() && currentAbove.getType().isSolid() &&
-                                !isDoor(currentAbove) && !isBanner(currentAbove) && !isIronTrapdoor(currentAbove)) {
-                            if (shouldBreakBlock(currentAbove, player)) {
-                                toBreak = true;
+                                blocksToBreak = addBlockToBreak(blocksToBreak, currentCeiling);
                             } else {
                                 continue;
                             }
@@ -501,39 +501,35 @@ public class Pathfinder {
                         Block targetBlock = nextLocation.getBlock();
                         if (!isLowBlockButNotStair(targetBlock) && shouldBreakBlock(targetBlock, player)) {
                             toBreak = true;
+                            blocksToBreak = addBlockToBreak(blocksToBreak, targetBlock);
                         }
                     }
 
-                    boolean diagonal = (dx[i] != 0 && dz[i] != 0);
+                    boolean diagonal = (MOVE_DX[i] != 0 && MOVE_DZ[i] != 0);
                     double moveCost = diagonal ? PathfinderConfig.DIAGONAL_COST : PathfinderConfig.STRAIGHT_COST;
 
                     if (current.parent != null) {
-                        int currentDirX = dx[i];
-                        int currentDirZ = dz[i];
+                        int currentDirX = MOVE_DX[i];
+                        int currentDirZ = MOVE_DZ[i];
 
                         int prevDirX = current.dirX;
                         int prevDirZ = current.dirZ;
 
                         if (prevDirX != 0 || prevDirZ != 0) {
                             if (currentDirX != prevDirX || currentDirZ != prevDirZ) {
-                                double dotProduct = currentDirX * prevDirX + currentDirZ * prevDirZ;
-                                double prevMagnitude = Math.sqrt(prevDirX * prevDirX + prevDirZ * prevDirZ);
-                                double currentMagnitude = Math
-                                        .sqrt(currentDirX * currentDirX + currentDirZ * currentDirZ);
-                                double cosAngle = dotProduct / (prevMagnitude * currentMagnitude);
-
-                                if (Math.abs(cosAngle) < 0.01) {
+                                int dotProduct = currentDirX * prevDirX + currentDirZ * prevDirZ;
+                                if (dotProduct == 0) {
                                     moveCost += PathfinderConfig.RIGHT_ANGLE_TURN_COST;
-                                }
-                                else if (Math.abs(cosAngle - 0.7071) < 0.1 || Math.abs(cosAngle + 0.7071) < 0.1) {
+                                } else if ((currentDirX != 0 && currentDirZ != 0)
+                                        != (prevDirX != 0 && prevDirZ != 0)) {
                                     moveCost += PathfinderConfig.DIAGONAL_TURN_COST;
                                 }
                             }
                         }
                     }
 
-                    if (yOffset <= 0) {
-                        Location headPath = current.location.clone().add(dx[i], 1, dz[i]);
+                    if (moveType == MOVE_HORIZONTAL) {
+                        Location headPath = current.location.clone().add(MOVE_DX[i], 1, MOVE_DZ[i]);
                         Block headPathBlock = headPath.getBlock();
                         Block belowHeadPath = headPath.clone().add(0, -1, 0).getBlock();
 
@@ -545,13 +541,14 @@ public class Pathfinder {
                                 && !isDoor(headPathBlock) && !isBanner(headPathBlock)) {
                             if (shouldBreakBlock(headPathBlock, player)) {
                                 toBreak = true;
+                                blocksToBreak = addBlockToBreak(blocksToBreak, headPathBlock);
                             } else {
                                 continue;
                             }
                         }
                     }
 
-                    if (!isSafe(nextLocation)) {
+                    if (!isSafe(nextLocation, context)) {
                         Block nextBlock = nextLocation.getBlock();
                         Block groundBlock = nextLocation.clone().add(0, -1, 0).getBlock();
 
@@ -562,17 +559,21 @@ public class Pathfinder {
                         } else if (!isDoor(nextBlock) && !isBanner(nextBlock) && !isLowBlockButNotStair(nextBlock)
                                 && shouldBreakBlock(nextBlock, player)) {
                             toBreak = true;
+                            blocksToBreak = addBlockToBreak(blocksToBreak, nextBlock);
                         } else {
                             continue;
                         }
                     }
 
                     if (toBreak) {
-                        moveCost += PathfinderConfig.BREAK_BLOCK_COST;
+                        // Charge once for every distinct block this transition requires breaking.
+                        // Keep a one-cost fallback for legacy paths that only carry the boolean flag.
+                        int breakCount = blocksToBreak == null ? 0 : blocksToBreak.size();
+                        moveCost += PathfinderConfig.BREAK_BLOCK_COST * Math.max(1, breakCount);
                     }
 
-                    boolean nextInsideWater = isInsideWater(nextLocation);
-                    boolean nextOnWaterSurface = isOnWaterSurface(nextLocation);
+                    boolean nextInsideWater = isInsideWater(nextLocation, context);
+                    boolean nextOnWaterSurface = isOnWaterSurface(nextLocation, context);
                     
                     if (nextInsideWater) {
                         moveCost += PathfinderConfig.WATER_COST * 5.0;
@@ -635,95 +636,78 @@ public class Pathfinder {
                     }
 
                     double nextG = current.g + moveCost;
-                    double nextH = heuristic(nextLocation, endLoc);
 
-                    Node existingNode = allNodes.get(nextKey);
                     if (existingNode != null) {
                         if (nextG < existingNode.g) {
                             existingNode.parent = current;
                             existingNode.g = nextG;
                             existingNode.f = nextG + existingNode.h;
-                            existingNode.toBreak = toBreak;
+                            existingNode.setBlocksToBreak(blocksToBreak);
                             existingNode.moveType = moveType;
                             existingNode.dirX = nextLocation.getBlockX() - current.location.getBlockX();
                             existingNode.dirZ = nextLocation.getBlockZ() - current.location.getBlockZ();
-                            openSet.remove(existingNode);
-                            openSet.add(existingNode);
+                            openSet.decreaseKey(existingNode);
                         }
                     } else {
+                        double nextH = heuristic(nextLocation, endLoc, context);
                         Node neighbor = new Node(nextLocation, current, nextG, nextH, toBreak, moveType);
+                        neighbor.setBlocksToBreak(blocksToBreak);
                         openSet.add(neighbor);
-                        allNodes.put(nextKey, neighbor);
+                        context.addNode(nextKey, neighbor);
                     }
                 }
             }
 
-            int[] jumpDx = { 0, 1, -1, 0 };
-            int[] jumpDz = { 1, 0, 0, -1 };
+            Block blockJumpFeet = current.location.getBlock();
+            Block blockJumpGround = blockJumpFeet.getRelative(0, -1, 0);
+            boolean onScaffoldingForBlockJump = isScaffolding(blockJumpGround) || isScaffolding(blockJumpFeet);
+            boolean canStartBlockJump = !isTraversableWaterSurface(current.location)
+                    && !((isLowBlockButNotStair(blockJumpFeet)
+                    || isLowBlockButNotStair(blockJumpGround)) && !onScaffoldingForBlockJump);
+            canStartBlockJump = canStartBlockJump && hasJumpTrajectoryClearance(blockJumpFeet);
 
-            for (int dir = 0; dir < jumpDx.length; dir++) {
-                int jumpDirX = jumpDx[dir];
-                int jumpDirZ = jumpDz[dir];
-
-                Block currentFeetBlock = current.location.getBlock();
-                Block currentGroundBlock = current.location.clone().add(0, -1, 0).getBlock();
-                boolean onScaffoldingForBlockJump = isScaffolding(currentGroundBlock) || isScaffolding(currentFeetBlock);
-                if ((isLowBlockButNotStair(currentFeetBlock) || isLowBlockButNotStair(currentGroundBlock)) && !onScaffoldingForBlockJump) {
-                    continue;
-                }
+            for (int dir = 0; dir < JUMP_DX.length && canStartBlockJump; dir++) {
+                int jumpDirX = JUMP_DX[dir];
+                int jumpDirZ = JUMP_DZ[dir];
 
                 for (int distance = 2; distance <= PathfinderConfig.MAX_BLOCK_JUMP_DISTANCE; distance++) {
                     Location jumpTarget = current.location.clone().add(jumpDirX * distance, 0, jumpDirZ * distance);
-                    String jumpKey = locationKey(jumpTarget);
+                    long jumpKey = coordinateKey(jumpTarget);
+                    Node existingNode = context.nodes.get(jumpKey);
 
-                    if (closedSet.contains(jumpKey)) {
+                    if (existingNode != null && existingNode.closed) {
+                        continue;
+                    }
+
+                    if (isTraversableWaterSurface(jumpTarget)) {
+                        continue;
+                    }
+
+                    // Landing only needs room for the player's feet and head.
+                    if (!isSafe(jumpTarget, context)) {
                         continue;
                     }
 
                     boolean canJump = true;
 
-                    for (int y = 1; y <= 3; y++) {
-                        Block checkBlock = current.location.getBlock().getRelative(0, y, 0);
-                        if (!checkBlock.isPassable() && checkBlock.getType().isSolid() && !isDoor(checkBlock)
-                                && !isBanner(checkBlock)) {
+                    boolean hasObstacle = false;
+                    for (int step = 1; step < distance; step++) {
+                        Location pathPoint = current.location.clone().add(jumpDirX * step, 0, jumpDirZ * step);
+                        Block pathBlock = pathPoint.getBlock();
+                        Block belowPathBlock = pathPoint.clone().add(0, -1, 0).getBlock();
+
+                        boolean jumpableFence = isJumpableFence(pathBlock);
+                        if (isBanner(pathBlock) || isBanner(belowPathBlock)) {
+                            hasObstacle = true;
                             canJump = false;
                             break;
                         }
-                    }
-
-                    if (!canJump)
-                        continue;
-
-                    for (int y = 1; y <= 3; y++) {
-                        Block checkBlock = jumpTarget.getBlock().getRelative(0, y, 0);
-                        if (!checkBlock.isPassable() && checkBlock.getType().isSolid() && !isDoor(checkBlock)
-                                && !isBanner(checkBlock)) {
+                        if (!pathBlock.isPassable() && pathBlock.getType().isSolid() && !jumpableFence
+                                && !isDoor(pathBlock)) {
+                            hasObstacle = true;
                             canJump = false;
                             break;
                         }
-                    }
-
-                    if (!canJump)
-                        continue;
-
-                        boolean hasObstacle = false;
-                        for (int step = 1; step < distance; step++) {
-                            Location pathPoint = current.location.clone().add(jumpDirX * step, 0, jumpDirZ * step);
-                            Block pathBlock = pathPoint.getBlock();
-                            Block belowPathBlock = pathPoint.clone().add(0, -1, 0).getBlock();
-
-                            boolean jumpableFence = isJumpableFence(pathBlock);
-                            if (isBanner(pathBlock) || isBanner(belowPathBlock)) {
-                                hasObstacle = true;
-                                canJump = false;
-                                break;
-                            }
-                            if (!pathBlock.isPassable() && pathBlock.getType().isSolid() && !jumpableFence
-                                    && !isDoor(pathBlock)) {
-                                hasObstacle = true;
-                                canJump = false;
-                                break;
-                            }
 
                         if ((isFence(pathBlock) && !isJumpableFence(pathBlock)) || isFenceGate(pathBlock)) {
                             hasObstacle = true;
@@ -752,7 +736,7 @@ public class Pathfinder {
                             break;
                         }
 
-                        for (int y = 1; y <= 3; y++) {
+                        for (int y = 1; y <= 2; y++) {
                             Block checkBlock = pathPoint.getBlock().getRelative(0, y, 0);
                             if (isBanner(checkBlock)) {
                                 hasObstacle = true;
@@ -783,7 +767,7 @@ public class Pathfinder {
                     boolean canReachByNormalMove = true;
                     if (distance == 2) {
                         Location midPoint = current.location.clone().add(jumpDirX, heightDiff, jumpDirZ);
-                        if (!isSafe(midPoint) || heightDiff > 1) {
+                        if (!isSafe(midPoint, context) || heightDiff > 1) {
                             canReachByNormalMove = false;
                         }
                     }
@@ -794,10 +778,6 @@ public class Pathfinder {
 
                     if (!canJump)
                         continue;
-
-                    if (!isSafe(jumpTarget)) {
-                        continue;
-                    }
 
                     Block jumpTargetBlock = jumpTarget.getBlock();
                     Block belowJumpTarget = jumpTarget.clone().add(0, -1, 0).getBlock();
@@ -811,27 +791,25 @@ public class Pathfinder {
 
                     double jumpCost = PathfinderConfig.BLOCK_JUMP_COST * distance * distance;
                     double nextG = current.g + jumpCost;
-                    double nextH = heuristic(jumpTarget, endLoc);
 
-                    Node existingNode = allNodes.get(jumpKey);
                     if (existingNode != null) {
                         if (nextG < existingNode.g) {
                             existingNode.parent = current;
                             existingNode.g = nextG;
                             existingNode.f = nextG + existingNode.h;
-                            existingNode.toBreak = false;
+                            existingNode.setBlocksToBreak(null);
                             existingNode.moveType = MOVE_BLOCK_JUMP;
                             existingNode.dirX = jumpDirX * distance;
                             existingNode.dirZ = jumpDirZ * distance;
-                            openSet.remove(existingNode);
-                            openSet.add(existingNode);
+                            openSet.decreaseKey(existingNode);
                         }
                     } else {
+                        double nextH = heuristic(jumpTarget, endLoc, context);
                         Node jumpNode = new Node(jumpTarget, current, nextG, nextH, false, MOVE_BLOCK_JUMP);
                         jumpNode.dirX = jumpDirX * distance;
                         jumpNode.dirZ = jumpDirZ * distance;
                         openSet.add(jumpNode);
-                        allNodes.put(jumpKey, jumpNode);
+                        context.addNode(jumpKey, jumpNode);
                     }
                 }
             }
@@ -839,8 +817,8 @@ public class Pathfinder {
 
         Node closest = null;
         double closestDistance = Double.MAX_VALUE;
-        for (Node node : allNodes.values()) {
-            double distance = node.location.distance(endLoc);
+        for (Node node : context.allNodes) {
+            double distance = node.location.distanceSquared(endLoc);
             if (distance < closestDistance) {
                 closestDistance = distance;
                 closest = node;
@@ -850,20 +828,14 @@ public class Pathfinder {
         return closest != null ? reconstructPath(closest) : null;
     }
 
-    private static String locationKey(Location loc) {
-        int x = loc.getBlockX();
-        int y = loc.getBlockY();
-        int z = loc.getBlockZ();
+    private static long coordinateKey(Location loc) {
+        return coordinateKey(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+    }
 
-        String key = x + "," + y + "," + z;
-
-        String cachedKey = LOCATION_KEY_CACHE.get(key);
-        if (cachedKey != null) {
-            return cachedKey;
-        }
-
-        LOCATION_KEY_CACHE.put(key, key);
-        return key;
+    private static long coordinateKey(int x, int y, int z) {
+        return ((long) x & 0x3FFFFFFL) << 38
+                | ((long) z & 0x3FFFFFFL) << 12
+                | (long) y & 0xFFFL;
     }
 
     private static List<Node> reconstructPath(Node node) {
@@ -880,6 +852,7 @@ public class Pathfinder {
             node = node.parent;
         }
         Collections.reverse(path);
+        path = smoothWaterSurfacePath(path);
 
         List<Node> expandedPath = new ArrayList<>();
 
@@ -891,10 +864,14 @@ public class Pathfinder {
                 int dz = nextNode.location.getBlockZ() - firstNode.location.getBlockZ();
                 int distance = Math.max(Math.abs(dx), Math.abs(dz));
 
-                if (nextNode.moveType == MOVE_BLOCK_JUMP || distance > 1) {
+                if (nextNode.moveType == MOVE_WATER_SURFACE) {
+                    firstNode.moveType = MOVE_WATER_SURFACE;
+                    firstNode.dirX = Integer.compare(dx, 0);
+                    firstNode.dirZ = Integer.compare(dz, 0);
+                } else if (nextNode.moveType == MOVE_BLOCK_JUMP || distance > 1) {
                     firstNode.moveType = MOVE_BLOCK_JUMP;
-                    firstNode.dirX = dx == 0 ? 0 : (dx > 0 ? 1 : -1);
-                    firstNode.dirZ = dz == 0 ? 0 : (dz > 0 ? 1 : -1);
+                    firstNode.dirX = Integer.compare(dx, 0);
+                    firstNode.dirZ = Integer.compare(dz, 0);
                 }
             }
             expandedPath.add(firstNode);
@@ -909,7 +886,13 @@ public class Pathfinder {
             int dy = nextNode.location.getBlockY() - currentNode.location.getBlockY();
             int distance = Math.max(Math.abs(dx), Math.abs(dz));
 
-            if (distance > 1 || nextNode.moveType == MOVE_BLOCK_JUMP) {
+            if (nextNode.moveType == MOVE_WATER_SURFACE) {
+                currentNode.moveType = MOVE_WATER_SURFACE;
+                currentNode.dirX = Integer.compare(dx, 0);
+                currentNode.dirZ = Integer.compare(dz, 0);
+                nextNode.dirX = currentNode.dirX;
+                nextNode.dirZ = currentNode.dirZ;
+            } else if (distance > 1 || nextNode.moveType == MOVE_BLOCK_JUMP) {
                 currentNode.moveType = MOVE_BLOCK_JUMP;
                 nextNode.moveType = MOVE_BLOCK_JUMP;
 
@@ -953,19 +936,123 @@ public class Pathfinder {
             expandedPath.add(nextNode);
         }
 
+        for (Node pathNode : expandedPath) {
+            pathNode.populateDisplayFlags();
+        }
+
         return expandedPath;
     }
 
-    private static double heuristic(Location a, Location b) {
+    private static List<Node> smoothWaterSurfacePath(List<Node> path) {
+        if (path.size() < 3) {
+            return path;
+        }
+
+        List<Node> smoothed = new ArrayList<>(path.size());
+        smoothed.add(path.get(0));
+        int currentIndex = 0;
+
+        while (currentIndex < path.size() - 1) {
+            Node current = path.get(currentIndex);
+            int nextIndex = currentIndex + 1;
+
+            if (isTraversableWaterSurface(current.location)) {
+                int farthestVisible = currentIndex;
+                int surfaceY = current.location.getBlockY();
+
+                for (int candidate = currentIndex + 1; candidate < path.size(); candidate++) {
+                    Node candidateNode = path.get(candidate);
+                    if (candidateNode.location.getBlockY() != surfaceY
+                            || !isTraversableWaterSurface(candidateNode.location)) {
+                        break;
+                    }
+                    if (hasDirectWaterSurfacePath(current.location, candidateNode.location)) {
+                        farthestVisible = candidate;
+                    }
+                }
+
+                if (farthestVisible > currentIndex + 1) {
+                    Node destination = path.get(farthestVisible);
+                    current.moveType = MOVE_WATER_SURFACE;
+                    destination.moveType = MOVE_WATER_SURFACE;
+                    nextIndex = farthestVisible;
+                }
+            }
+
+            smoothed.add(path.get(nextIndex));
+            currentIndex = nextIndex;
+        }
+
+        return smoothed;
+    }
+
+    private static boolean hasDirectWaterSurfacePath(Location start, Location end) {
+        if (start.getWorld() == null || start.getWorld() != end.getWorld()
+                || start.getBlockY() != end.getBlockY()) {
+            return false;
+        }
+
+        double startX = start.getBlockX() + 0.5;
+        double startZ = start.getBlockZ() + 0.5;
+        double deltaX = end.getBlockX() + 0.5 - startX;
+        double deltaZ = end.getBlockZ() + 0.5 - startZ;
+        int samples = Math.max(1, (int) Math.ceil(Math.hypot(deltaX, deltaZ) * 4.0));
+
+        for (int sample = 0; sample <= samples; sample++) {
+            double ratio = (double) sample / samples;
+            Location point = new Location(start.getWorld(),
+                    startX + deltaX * ratio,
+                    start.getBlockY(),
+                    startZ + deltaZ * ratio);
+            if (!isTraversableWaterSurface(point)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static boolean isTraversableWaterSurface(Location location) {
+        Block feet = location.getBlock();
+        Block head = feet.getRelative(0, 1, 0);
+        Block below = feet.getRelative(0, -1, 0);
+
+        boolean feetWater = containsWithCache(feet.getType().name(), "WATER");
+        boolean headWater = containsWithCache(head.getType().name(), "WATER");
+        boolean belowWater = containsWithCache(below.getType().name(), "WATER");
+
+        boolean feetOpen = (feet.isPassable() && !OBSTACLES.contains(feet.getType()))
+                || feetWater
+                || (belowWater && containsWithCache(feet.getType().name(), "KELP"));
+        boolean headOpen = head.isPassable()
+                && !headWater
+                && !OBSTACLES.contains(head.getType());
+
+        return feetOpen && headOpen
+                && ((!feetWater && belowWater) || (feetWater && !headWater));
+    }
+
+    private static boolean hasJumpTrajectoryClearance(Block feet) {
+        for (int y = 1; y <= 2; y++) {
+            Block block = feet.getRelative(0, y, 0);
+            if (!block.isPassable() && block.getType().isSolid()
+                    && !isDoor(block) && !isBanner(block)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static double heuristic(Location a, Location b, SearchContext context) {
         int dx = Math.abs(a.getBlockX() - b.getBlockX());
         int dy = Math.abs(a.getBlockY() - b.getBlockY());
         int dz = Math.abs(a.getBlockZ() - b.getBlockZ());
 
         double baseHeuristic = dx + dz + dy * 1.5;
 
-        boolean insideWater = isInsideWater(a);
-        boolean targetInsideWater = isInsideWater(b);
-        boolean onWaterSurface = isOnWaterSurface(a);
+        boolean insideWater = isInsideWater(a, context);
+        boolean targetInsideWater = isInsideWater(b, context);
+        boolean onWaterSurface = isOnWaterSurface(a, context);
 
         if (insideWater) {
             baseHeuristic += PathfinderConfig.WATER_COST * 2.0;
@@ -1033,6 +1120,32 @@ public class Pathfinder {
         return false;
     }
 
+    private static boolean isInsideWater(Location location, SearchContext context) {
+        return (waterState(location, context) & SearchContext.WATER_INSIDE) != 0;
+    }
+
+    private static boolean isOnWaterSurface(Location location, SearchContext context) {
+        return (waterState(location, context) & SearchContext.WATER_SURFACE) != 0;
+    }
+
+    private static byte waterState(Location location, SearchContext context) {
+        long key = coordinateKey(location);
+        byte cached = context.waterStates.get(key);
+        if (cached != 0) {
+            return cached;
+        }
+
+        byte state = SearchContext.WATER_KNOWN;
+        if (isInsideWater(location)) {
+            state |= SearchContext.WATER_INSIDE;
+        }
+        if (isOnWaterSurface(location)) {
+            state |= SearchContext.WATER_SURFACE;
+        }
+        context.waterStates.put(key, state);
+        return state;
+    }
+
     private static final Set<String> UNBREAKABLE_BLOCKS = new HashSet<>(Arrays.asList(
             "BEDROCK", "PORTAL", "SPAWNER", "BARRIER", "END_PORTAL", "END_GATEWAY"));
 
@@ -1093,15 +1206,12 @@ public class Pathfinder {
         }
 
         boolean nearLava = false;
-        int[][] directions = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 } };
-
-        for (int[] dir : directions) {
+        for (int[] dir : HAZARD_DIRECTIONS) {
             Block neighbor = block.getRelative(dir[0], dir[1], dir[2]);
             String neighborType = neighbor.getType().name();
 
             if (neighborType.contains("LAVA")) {
                 nearLava = true;
-                block.setMetadata("nearLava", new FixedMetadataValue(PathFinderPlugin.getInstance(), true));
                 break;
             }
         }
@@ -1113,34 +1223,8 @@ public class Pathfinder {
         return true;
     }
 
-    private static final Map<Material, Boolean> DOOR_CACHE = new HashMap<>();
-    private static final Map<Material, Boolean> TRAPDOOR_CACHE = new HashMap<>();
-    private static final Map<Material, Boolean> BANNER_CACHE = new HashMap<>();
-    private static final Map<Material, Boolean> LADDER_CACHE = new HashMap<>();
-    private static final Map<Material, Boolean> SCAFFOLDING_CACHE = new HashMap<>();
-
     public static boolean isDoor(Block block) {
-        Material type = block.getType();
-        Boolean result = DOOR_CACHE.get(type);
-        if (result != null) {
-            return result;
-        }
-        
-        String materialName = type.name();
-        String keyString = type.getKey().toString();
-
-        result = (type == Material.OAK_DOOR || type == Material.SPRUCE_DOOR ||
-                type == Material.BIRCH_DOOR || type == Material.JUNGLE_DOOR ||
-                type == Material.ACACIA_DOOR || type == Material.DARK_OAK_DOOR ||
-                type == Material.IRON_DOOR || type == Material.MANGROVE_DOOR ||
-                type == Material.BAMBOO_DOOR || type == Material.CRIMSON_DOOR ||
-                type == Material.WARPED_DOOR || type == Material.COPPER_DOOR ||
-                type == Material.CHERRY_DOOR) ||
-                containsWithCache(materialName, "DOOR") ||
-                containsWithCache(keyString, "_door");
-
-        DOOR_CACHE.put(type, result);
-        return result;
+        return DOOR_TYPES[block.getType().ordinal()];
     }
 
     public static boolean isDoorPassable(Block block) {
@@ -1152,47 +1236,7 @@ public class Pathfinder {
     }
 
     public static boolean isBanner(Block block) {
-        Material type = block.getType();
-        Boolean result = BANNER_CACHE.get(type);
-        if (result != null) {
-            return result;
-        }
-
-        String materialName = type.name();
-        String keyString = type.getKey().toString();
-
-        result = (type == Material.WHITE_BANNER || type == Material.ORANGE_BANNER ||
-                type == Material.MAGENTA_BANNER || type == Material.LIGHT_BLUE_BANNER ||
-                type == Material.YELLOW_BANNER || type == Material.LIME_BANNER ||
-                type == Material.PINK_BANNER || type == Material.GRAY_BANNER ||
-                type == Material.LIGHT_GRAY_BANNER || type == Material.CYAN_BANNER ||
-                type == Material.PURPLE_BANNER || type == Material.BLUE_BANNER ||
-                type == Material.BROWN_BANNER || type == Material.GREEN_BANNER ||
-                type == Material.RED_BANNER || type == Material.BLACK_BANNER ||
-                type == Material.WHITE_WALL_BANNER || type == Material.ORANGE_WALL_BANNER ||
-                type == Material.MAGENTA_WALL_BANNER || type == Material.LIGHT_BLUE_WALL_BANNER ||
-                type == Material.YELLOW_WALL_BANNER || type == Material.LIME_WALL_BANNER ||
-                type == Material.PINK_WALL_BANNER || type == Material.GRAY_WALL_BANNER ||
-                type == Material.LIGHT_GRAY_WALL_BANNER || type == Material.CYAN_WALL_BANNER ||
-                type == Material.PURPLE_WALL_BANNER || type == Material.BLUE_WALL_BANNER ||
-                type == Material.BROWN_WALL_BANNER || type == Material.GREEN_WALL_BANNER ||
-                type == Material.RED_WALL_BANNER || type == Material.BLACK_WALL_BANNER) ||
-                containsWithCache(materialName, "BANNER") ||
-                containsWithCache(keyString, "_banner") ||
-                containsWithCache(keyString, "banners") ||
-                containsWithCache(keyString, ":banner") ||
-                keyString.equals("minecraft:banners");
-
-        if (!result && (containsWithCache(materialName.toLowerCase(), "banner") ||
-                containsWithCache(keyString.toLowerCase(), "banner"))) {
-            PathFinderPlugin plugin = PathFinderPlugin.getInstance();
-            if (plugin != null) {
-                plugin.getLogger().info("未识别的旗帜方块: Material=" + materialName + ", Key=" + keyString);
-            }
-        }
-
-        BANNER_CACHE.put(type, result);
-        return result;
+        return BANNER_TYPES[block.getType().ordinal()];
     }
 
     public static boolean isBannerPassable(Block block) {
@@ -1204,37 +1248,11 @@ public class Pathfinder {
     }
 
     public static boolean isTrapdoor(Block block) {
-        Material type = block.getType();
-        Boolean result = TRAPDOOR_CACHE.get(type);
-        if (result != null) {
-            return result;
-        }
-
-        String materialName = type.name();
-        String keyString = type.getKey().toString();
-
-        result = (type == Material.OAK_TRAPDOOR || type == Material.SPRUCE_TRAPDOOR ||
-                type == Material.BIRCH_TRAPDOOR || type == Material.JUNGLE_TRAPDOOR ||
-                type == Material.ACACIA_TRAPDOOR || type == Material.DARK_OAK_TRAPDOOR ||
-                type == Material.IRON_TRAPDOOR || type == Material.MANGROVE_TRAPDOOR ||
-                type == Material.BAMBOO_TRAPDOOR || type == Material.CRIMSON_TRAPDOOR ||
-                type == Material.WARPED_TRAPDOOR || type == Material.COPPER_TRAPDOOR ||
-                type == Material.CHERRY_TRAPDOOR) ||
-                containsWithCache(materialName, "TRAPDOOR") ||
-                containsWithCache(keyString, "trapdoor");
-
-        TRAPDOOR_CACHE.put(type, result);
-        return result;
+        return TRAPDOOR_TYPES[block.getType().ordinal()];
     }
 
     public static boolean isIronTrapdoor(Block block) {
-        Material type = block.getType();
-        String materialName = type.name();
-        String keyString = type.getKey().toString();
-
-        return type == Material.IRON_TRAPDOOR ||
-                containsWithCache(materialName, "IRON_TRAPDOOR") ||
-                containsWithCache(keyString, "iron_trapdoor");
+        return IRON_TRAPDOOR_TYPES[block.getType().ordinal()];
     }
 
     public static boolean isTrapdoorPassable(Block block) {
@@ -1242,14 +1260,7 @@ public class Pathfinder {
     }
 
     public static boolean isLadder(Block block) {
-        Material type = block.getType();
-        Boolean result = LADDER_CACHE.get(type);
-        if (result != null) {
-            return result;
-        }
-        result = containsWithCache(type.name(), "LADDER");
-        LADDER_CACHE.put(type, result);
-        return result;
+        return LADDER_TYPES[block.getType().ordinal()];
     }
     
     private static boolean isJumpableFence(Block fenceBlock) {
@@ -1265,14 +1276,7 @@ public class Pathfinder {
     }
 
     public static boolean isScaffolding(Block block) {
-        Material type = block.getType();
-        Boolean result = SCAFFOLDING_CACHE.get(type);
-        if (result != null) {
-            return result;
-        }
-        result = containsWithCache(type.name(), "SCAFFOLDING");
-        SCAFFOLDING_CACHE.put(type, result);
-        return result;
+        return SCAFFOLDING_TYPES[block.getType().ordinal()];
     }
 
     public static boolean isNearLava(Block block) {
@@ -1284,9 +1288,7 @@ public class Pathfinder {
             }
         }
 
-        int[][] directions = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 } };
-
-        for (int[] dir : directions) {
+        for (int[] dir : HAZARD_DIRECTIONS) {
             Block neighbor = block.getRelative(dir[0], dir[1], dir[2]);
             if (neighbor.getType().name().contains("LAVA") || neighbor.getType().name().contains("FIRE")) {
                 block.setMetadata("nearLava", new FixedMetadataValue(PathFinderPlugin.getInstance(), true));
@@ -1297,24 +1299,15 @@ public class Pathfinder {
         return false;
     }
 
-    private static final Map<Material, Boolean> PASSABLE_CACHE = new HashMap<>();
-    private static final Map<Material, Boolean> SOLID_CACHE = new HashMap<>();
-
     private static boolean containsWithCache(String str, String substr) {
-        String key = str + "_" + substr;
-        Boolean result = STRING_CONTAINS_CACHE.get(key);
-        if (result != null) {
-            return result;
-        }
-        result = str.contains(substr);
-        STRING_CONTAINS_CACHE.put(key, result);
-        return result;
+        return str.contains(substr);
     }
 
-    private static boolean isSafe(Location loc) {
-        Boolean cachedResult = SAFE_LOCATION_CACHE.get(loc);
-        if (cachedResult != null) {
-            return cachedResult;
+    private static boolean isSafe(Location loc, SearchContext context) {
+        long key = coordinateKey(loc);
+        byte cachedResult = context.safeLocations.get(key);
+        if (cachedResult != 0) {
+            return cachedResult == LongByteMap.TRUE;
         }
 
         Block feet = loc.getBlock();
@@ -1333,7 +1326,7 @@ public class Pathfinder {
                 containsWithCache(feetName, "LAVA") || containsWithCache(feetName, "FIRE") ||
                 containsWithCache(headName, "LAVA") || containsWithCache(headName, "FIRE") ||
                 containsWithCache(groundName, "LAVA") || containsWithCache(groundName, "FIRE")) {
-            SAFE_LOCATION_CACHE.put(loc.clone(), false);
+            context.safeLocations.put(key, LongByteMap.FALSE);
             return false;
         }
 
@@ -1342,9 +1335,9 @@ public class Pathfinder {
             feetName = "AIR";
         }
 
-        if (isInsideWater(loc)) {
+        if (isInsideWater(loc, context)) {
             if (!containsWithCache(headName, "WATER") && !head.isPassable()) {
-                SAFE_LOCATION_CACHE.put(loc.clone(), false);
+                context.safeLocations.put(key, LongByteMap.FALSE);
                 return false;
             }
         }
@@ -1368,9 +1361,7 @@ public class Pathfinder {
         }
 
         boolean nearLava = false;
-        int[][] directions = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 } };
-
-        for (int[] dir : directions) {
+        for (int[] dir : HAZARD_DIRECTIONS) {
             Block neighbor = feet.getRelative(dir[0], dir[1], dir[2]);
             String neighborType = neighbor.getType().name();
 
@@ -1381,15 +1372,292 @@ public class Pathfinder {
         }
 
         if (nearLava) {
-            loc.getBlock().setMetadata("nearLava",
-                    new org.bukkit.metadata.FixedMetadataValue(PathFinderPlugin.getInstance(), true));
-            SAFE_LOCATION_CACHE.put(loc.clone(), false);
+            context.safeLocations.put(key, LongByteMap.FALSE);
             return false;
         }
 
         boolean result = feetPassable && headPassable && groundSolid;
-        SAFE_LOCATION_CACHE.put(loc.clone(), result);
+        context.safeLocations.put(key, result ? LongByteMap.TRUE : LongByteMap.FALSE);
         return result;
+    }
+
+    private static int compareNodes(Node n1, Node n2) {
+        int fCompare = Double.compare(n1.f, n2.f);
+        if (fCompare != 0) {
+            return fCompare;
+        }
+
+        int gCompare = Double.compare(n2.g, n1.g);
+        if (gCompare != 0) {
+            return gCompare;
+        }
+
+        int xCompare = Integer.compare(n1.location.getBlockX(), n2.location.getBlockX());
+        if (xCompare != 0) {
+            return xCompare;
+        }
+
+        int zCompare = Integer.compare(n1.location.getBlockZ(), n2.location.getBlockZ());
+        if (zCompare != 0) {
+            return zCompare;
+        }
+
+        return Integer.compare(n1.location.getBlockY(), n2.location.getBlockY());
+    }
+
+    private static final class SearchContext {
+        private static final byte WATER_KNOWN = 1;
+        private static final byte WATER_INSIDE = 2;
+        private static final byte WATER_SURFACE = 4;
+
+        private final LongNodeMap nodes = new LongNodeMap(2048);
+        private final LongByteMap safeLocations = new LongByteMap(2048);
+        private final LongByteMap waterStates = new LongByteMap(2048);
+        private final List<Node> allNodes = new ArrayList<>(1024);
+
+        private void addNode(long key, Node node) {
+            nodes.put(key, node);
+            allNodes.add(node);
+        }
+    }
+
+    private static final class IndexedOpenSet {
+        private Node[] heap;
+        private int size;
+
+        private IndexedOpenSet(int initialCapacity) {
+            heap = new Node[Math.max(2, initialCapacity + 1)];
+        }
+
+        private boolean isEmpty() {
+            return size == 0;
+        }
+
+        private void add(Node node) {
+            ensureCapacity(size + 1);
+            heap[++size] = node;
+            node.heapIndex = size;
+            siftUp(size);
+        }
+
+        private Node poll() {
+            Node result = heap[1];
+            Node tail = heap[size];
+            heap[size--] = null;
+            result.heapIndex = -1;
+            if (size > 0) {
+                heap[1] = tail;
+                tail.heapIndex = 1;
+                siftDown(1);
+            }
+            return result;
+        }
+
+        private void decreaseKey(Node node) {
+            if (node.heapIndex <= 0) {
+                throw new IllegalStateException("Cannot update a node outside the open set");
+            }
+            siftUp(node.heapIndex);
+        }
+
+        private void siftUp(int index) {
+            Node value = heap[index];
+            while (index > 1) {
+                int parentIndex = index >>> 1;
+                Node parent = heap[parentIndex];
+                if (compareNodes(value, parent) >= 0) {
+                    break;
+                }
+                heap[index] = parent;
+                parent.heapIndex = index;
+                index = parentIndex;
+            }
+            heap[index] = value;
+            value.heapIndex = index;
+        }
+
+        private void siftDown(int index) {
+            Node value = heap[index];
+            int half = size >>> 1;
+            while (index <= half) {
+                int child = index << 1;
+                int right = child + 1;
+                if (right <= size && compareNodes(heap[right], heap[child]) < 0) {
+                    child = right;
+                }
+                Node childValue = heap[child];
+                if (compareNodes(value, childValue) <= 0) {
+                    break;
+                }
+                heap[index] = childValue;
+                childValue.heapIndex = index;
+                index = child;
+            }
+            heap[index] = value;
+            value.heapIndex = index;
+        }
+
+        private void ensureCapacity(int requestedSize) {
+            if (requestedSize < heap.length) {
+                return;
+            }
+            heap = Arrays.copyOf(heap, heap.length << 1);
+        }
+    }
+
+    private static final class LongNodeMap {
+        private static final float LOAD_FACTOR = 0.65f;
+
+        private long[] keys;
+        private Node[] values;
+        private int mask;
+        private int resizeAt;
+        private int size;
+
+        private LongNodeMap(int expectedSize) {
+            int capacity = tableSize(expectedSize, LOAD_FACTOR);
+            keys = new long[capacity];
+            values = new Node[capacity];
+            mask = capacity - 1;
+            resizeAt = (int) (capacity * LOAD_FACTOR);
+        }
+
+        private Node get(long key) {
+            int index = mix(key) & mask;
+            while (true) {
+                Node value = values[index];
+                if (value == null) {
+                    return null;
+                }
+                if (keys[index] == key) {
+                    return value;
+                }
+                index = (index + 1) & mask;
+            }
+        }
+
+        private void put(long key, Node value) {
+            if (size >= resizeAt) {
+                resize();
+            }
+            putWithoutResize(key, value);
+        }
+
+        private void putWithoutResize(long key, Node value) {
+            int index = mix(key) & mask;
+            while (values[index] != null) {
+                if (keys[index] == key) {
+                    values[index] = value;
+                    return;
+                }
+                index = (index + 1) & mask;
+            }
+            keys[index] = key;
+            values[index] = value;
+            size++;
+        }
+
+        private void resize() {
+            long[] oldKeys = keys;
+            Node[] oldValues = values;
+            int newCapacity = oldValues.length << 1;
+            keys = new long[newCapacity];
+            values = new Node[newCapacity];
+            mask = newCapacity - 1;
+            resizeAt = (int) (newCapacity * LOAD_FACTOR);
+            size = 0;
+            for (int i = 0; i < oldValues.length; i++) {
+                if (oldValues[i] != null) {
+                    putWithoutResize(oldKeys[i], oldValues[i]);
+                }
+            }
+        }
+    }
+
+    private static final class LongByteMap {
+        private static final byte FALSE = 1;
+        private static final byte TRUE = 2;
+        private static final float LOAD_FACTOR = 0.65f;
+
+        private long[] keys;
+        private byte[] values;
+        private int mask;
+        private int resizeAt;
+        private int size;
+
+        private LongByteMap(int expectedSize) {
+            int capacity = tableSize(expectedSize, LOAD_FACTOR);
+            keys = new long[capacity];
+            values = new byte[capacity];
+            mask = capacity - 1;
+            resizeAt = (int) (capacity * LOAD_FACTOR);
+        }
+
+        private byte get(long key) {
+            int index = mix(key) & mask;
+            while (values[index] != 0) {
+                if (keys[index] == key) {
+                    return values[index];
+                }
+                index = (index + 1) & mask;
+            }
+            return 0;
+        }
+
+        private void put(long key, byte value) {
+            if (size >= resizeAt) {
+                resize();
+            }
+            putWithoutResize(key, value);
+        }
+
+        private void putWithoutResize(long key, byte value) {
+            int index = mix(key) & mask;
+            while (values[index] != 0) {
+                if (keys[index] == key) {
+                    values[index] = value;
+                    return;
+                }
+                index = (index + 1) & mask;
+            }
+            keys[index] = key;
+            values[index] = value;
+            size++;
+        }
+
+        private void resize() {
+            long[] oldKeys = keys;
+            byte[] oldValues = values;
+            int newCapacity = oldValues.length << 1;
+            keys = new long[newCapacity];
+            values = new byte[newCapacity];
+            mask = newCapacity - 1;
+            resizeAt = (int) (newCapacity * LOAD_FACTOR);
+            size = 0;
+            for (int i = 0; i < oldValues.length; i++) {
+                if (oldValues[i] != 0) {
+                    putWithoutResize(oldKeys[i], oldValues[i]);
+                }
+            }
+        }
+    }
+
+    private static int tableSize(int expectedSize, float loadFactor) {
+        int minimum = Math.max(2, (int) Math.ceil(expectedSize / loadFactor));
+        int capacity = 1;
+        while (capacity < minimum) {
+            capacity <<= 1;
+        }
+        return capacity;
+    }
+
+    private static int mix(long value) {
+        value ^= value >>> 33;
+        value *= 0xff51afd7ed558ccdl;
+        value ^= value >>> 33;
+        value *= 0xc4ceb9fe1a85ec53l;
+        value ^= value >>> 33;
+        return (int) value;
     }
 
     public static class Node {
@@ -1399,12 +1667,15 @@ public class Pathfinder {
         public double h;
         public double f;
         public boolean toBreak;
+        public List<Location> blocksToBreak;
         public int moveType;
         public int dirX;
         public int dirZ;
         public boolean isFenceGate;
         public boolean isDoor;
         public boolean isBanner;
+        private int heapIndex = -1;
+        private boolean closed;
 
         Node(Location location, Node parent, double g, double h, boolean toBreak) {
             this.location = location;
@@ -1413,19 +1684,10 @@ public class Pathfinder {
             this.h = h;
             this.f = g + h;
             this.toBreak = toBreak;
+            this.blocksToBreak = Collections.emptyList();
             this.moveType = MOVE_HORIZONTAL;
             this.dirX = 0;
             this.dirZ = 0;
-            this.isFenceGate = isFenceGate(location.getBlock()) ||
-                    isFenceGate(location.clone().add(0, -1, 0).getBlock()) ||
-                    isFenceGate(location.clone().add(0, 1, 0).getBlock());
-            this.isDoor = isDoor(location.getBlock()) ||
-                    isDoor(location.clone().add(0, -1, 0).getBlock()) ||
-                    isDoor(location.clone().add(0, 1, 0).getBlock());
-            this.isBanner = isBanner(location.getBlock()) ||
-                    isBanner(location.clone().add(0, -1, 0).getBlock()) ||
-                    isBanner(location.clone().add(0, 1, 0).getBlock());
-
             if (parent != null) {
                 this.dirX = location.getBlockX() - parent.location.getBlockX();
                 this.dirZ = location.getBlockZ() - parent.location.getBlockZ();
@@ -1446,25 +1708,33 @@ public class Pathfinder {
             this.h = h;
             this.f = g + h;
             this.toBreak = toBreak;
+            this.blocksToBreak = Collections.emptyList();
             this.moveType = moveType;
             this.dirX = 0;
             this.dirZ = 0;
-            this.isFenceGate = isFenceGate(location.getBlock()) ||
-                    isFenceGate(location.clone().add(0, -1, 0).getBlock()) ||
-                    isFenceGate(location.clone().add(0, 1, 0).getBlock());
-
-            this.isDoor = isDoor(location.getBlock()) ||
-                    isDoor(location.clone().add(0, -1, 0).getBlock()) ||
-                    isDoor(location.clone().add(0, 1, 0).getBlock());
-
-            this.isBanner = isBanner(location.getBlock()) ||
-                    isBanner(location.clone().add(0, -1, 0).getBlock()) ||
-                    isBanner(location.clone().add(0, 1, 0).getBlock());
-
             if (parent != null) {
                 this.dirX = location.getBlockX() - parent.location.getBlockX();
                 this.dirZ = location.getBlockZ() - parent.location.getBlockZ();
             }
+        }
+
+        private void setBlocksToBreak(List<Location> blocksToBreak) {
+            if (blocksToBreak == null || blocksToBreak.isEmpty()) {
+                this.blocksToBreak = Collections.emptyList();
+                this.toBreak = false;
+                return;
+            }
+            this.blocksToBreak = Collections.unmodifiableList(new ArrayList<>(blocksToBreak));
+            this.toBreak = true;
+        }
+
+        private void populateDisplayFlags() {
+            Block feet = location.getBlock();
+            Block below = feet.getRelative(0, -1, 0);
+            Block above = feet.getRelative(0, 1, 0);
+            this.isFenceGate = isFenceGate(feet) || isFenceGate(below) || isFenceGate(above);
+            this.isDoor = isDoor(feet) || isDoor(below) || isDoor(above);
+            this.isBanner = isBanner(feet) || isBanner(below) || isBanner(above);
         }
     }
 

@@ -8,6 +8,21 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 public class ParticleGen {
+    private static final int[][] BLOCK_EDGES = {
+            { 0, 0, 0, 1, 0, 0 },
+            { 0, 0, 1, 1, 0, 1 },
+            { 0, 0, 0, 0, 0, 1 },
+            { 1, 0, 0, 1, 0, 1 },
+            { 0, 1, 0, 1, 1, 0 },
+            { 0, 1, 1, 1, 1, 1 },
+            { 0, 1, 0, 0, 1, 1 },
+            { 1, 1, 0, 1, 1, 1 },
+            { 0, 0, 0, 0, 1, 0 },
+            { 1, 0, 0, 1, 1, 0 },
+            { 0, 0, 1, 0, 1, 1 },
+            { 1, 0, 1, 1, 1, 1 }
+    };
+
     public static Location adjustParticleLocationForWater(Location location) {
         if (location == null) return location;
         Location adjustedLoc = location.clone();
@@ -28,25 +43,20 @@ public class ParticleGen {
         int blockX = blockLoc.getBlockX();
         int blockY = blockLoc.getBlockY();
         int blockZ = blockLoc.getBlockZ();
-        double baseDensity = org.momu.pathfinder.config.PathfinderConfig.PARTICLE_SPACING;
-        double actualDensity = color.equals(Color.RED) ? baseDensity * 2.5 : baseDensity;
-        int edgeCount = color.equals(Color.RED) ? 8 : 12;
-        for (int j = 0; j < edgeCount; ++j) {
-            if (color.equals(Color.RED) && j >= 8) continue;
-            Location edgeStart, edgeEnd;
-            if (j < 4) {
-                edgeStart = new Location(blockLoc.getWorld(), blockX + (j % 2), blockY, blockZ + (j / 2));
-                edgeEnd = new Location(blockLoc.getWorld(), blockX + (j < 2 ? 1 - j % 2 : j % 2), blockY, blockZ + (j / 2));
-            } else if (j < 8) {
-                edgeStart = new Location(blockLoc.getWorld(), blockX + (j % 2), blockY + 1, blockZ + ((j / 2) % 2));
-                edgeEnd = new Location(blockLoc.getWorld(), blockX + (j < 6 ? 1 - j % 2 : j % 2), blockY + 1, blockZ + ((j / 2) % 2));
-            } else {
-                edgeStart = new Location(blockLoc.getWorld(), blockX + (j % 2), blockY + ((j / 2) % 2), blockZ + ((j / 2) % 2));
-                edgeEnd = new Location(blockLoc.getWorld(), blockX + (j % 2), blockY + (1 - (j / 2) % 2), blockZ + ((j / 2) % 2));
-            }
+        double actualDensity = particleDensity > 0.0
+                ? particleDensity
+                : org.momu.pathfinder.config.PathfinderConfig.PARTICLE_SPACING;
+        int steps = Math.max(1, (int) Math.ceil(1.0 / actualDensity));
+
+        for (int[] edge : BLOCK_EDGES) {
+            Location edgeStart = new Location(blockLoc.getWorld(),
+                    blockX + edge[0], blockY + edge[1], blockZ + edge[2]);
+            Location edgeEnd = new Location(blockLoc.getWorld(),
+                    blockX + edge[3], blockY + edge[4], blockZ + edge[5]);
             Vector direction = edgeEnd.toVector().subtract(edgeStart.toVector());
-            for (double d = 0.0; d < 1.0; d += actualDensity) {
-                Location particleLoc = edgeStart.clone().add(direction.clone().multiply(d));
+            for (int step = 0; step <= steps; step++) {
+                double ratio = (double) step / steps;
+                Location particleLoc = edgeStart.clone().add(direction.clone().multiply(ratio));
                 player.spawnParticle(Particle.DUST, particleLoc, 1, 0.0, 0.0, 0.0, 0.0,
                         (Object) new Particle.DustOptions(color, 0.9f));
             }

@@ -167,7 +167,9 @@ public class GuiManager {
                             .color(NamedTextColor.DARK_GRAY)
                             .append(Component.text(String.format("%.1fm", distance)).color(NamedTextColor.AQUA)));
                 } else {
-                    lore.add(Component.text("维度: ").color(NamedTextColor.DARK_GRAY)
+                    lore.add(Component.text(LanguageManager.getInstance()
+                            .getString(player, "messages.navigate-to-player-dimension"))
+                            .color(NamedTextColor.DARK_GRAY)
                             .append(Component.text(getWorldDisplayName(player, target.getWorld())).color(NamedTextColor.GOLD)));
                 }
                 String direction = getDirectionFromViewer(player, target);
@@ -385,6 +387,6 @@ public class GuiManager {
             clockDirection = clockDirection % 12;
         }
 
-        return clockDirection + LanguageManager.getInstance().getString(player, "messages.clock-direction");
+        return LanguageManager.getInstance().getString(player, "messages.clock-direction", clockDirection);
     }
 }

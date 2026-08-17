@@ -47,7 +47,10 @@ public class MainCommand
                 try {
                     NavCommands.handle(sender, args);
                 } catch (Exception e) {
-                    sender.sendMessage(Component.text("Error: " + e.getMessage(), NamedTextColor.RED));
+                    String errorMessage = sender instanceof Player player
+                            ? LanguageManager.getInstance().getString(player, "messages.nav-error", e.getMessage())
+                            : LanguageManager.getInstance().getString("messages.nav-error", e.getMessage());
+                    sender.sendMessage(Component.text(errorMessage, NamedTextColor.RED));
                 }
             }
             default -> {
@@ -152,20 +155,25 @@ public class MainCommand
             sender.sendMessage(Component.text(noPermMsg, NamedTextColor.RED));
             return;
         }
+        Player player = sender instanceof Player ? (Player) sender : null;
         sender.sendMessage(Component.text("", NamedTextColor.WHITE));
         sender.sendMessage(Component.text("═══════════════════════════════════", NamedTextColor.AQUA));
-        sender.sendMessage(Component.text("     PATHFINDER STATUS REPORT", NamedTextColor.GOLD));
+        sender.sendMessage(Component.text(LanguageManager.getInstance()
+                .getString(player, "messages.status-report-title"), NamedTextColor.GOLD));
         sender.sendMessage(Component.text("═══════════════════════════════════", NamedTextColor.AQUA));
 
-        sender.sendMessage(
-                Component.text("Plugin Version: " + plugin.getPluginMeta().getVersion(), NamedTextColor.WHITE));
+        sender.sendMessage(Component.text(LanguageManager.getInstance()
+                .getString(player, "messages.status-plugin-version", plugin.getPluginMeta().getVersion()),
+                NamedTextColor.WHITE));
 
         int playerCount = Bukkit.getOnlinePlayers().size();
         int maxPlayers = Bukkit.getMaxPlayers();
-        sender.sendMessage(Component.text("Players Online: " + playerCount + "/" + maxPlayers, NamedTextColor.WHITE));
+        sender.sendMessage(Component.text(LanguageManager.getInstance()
+                .getString(player, "messages.status-players-online", playerCount, maxPlayers), NamedTextColor.WHITE));
 
         String serverVersion = Bukkit.getVersion();
-        sender.sendMessage(Component.text("Server: " + serverVersion, NamedTextColor.WHITE));
+        sender.sendMessage(Component.text(LanguageManager.getInstance()
+                .getString(player, "messages.status-server", serverVersion), NamedTextColor.WHITE));
 
         sender.sendMessage(Component.text("═══════════════════════════════════", NamedTextColor.AQUA));
         sender.sendMessage(Component.text("", NamedTextColor.WHITE));

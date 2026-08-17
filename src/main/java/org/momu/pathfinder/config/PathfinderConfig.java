@@ -30,7 +30,6 @@ public class PathfinderConfig {
     public static int MAX_BLOCK_JUMP_DISTANCE = 3;
     public static int MAX_SAFE_FALL_HEIGHT = 3;
     public static int MAX_ITERATIONS = 10000;
-    public static boolean ENABLE_PATH_CACHING = false;
 
     public static void loadConfig(PathFinderPlugin plugin) {
         File pathfinderFile = new File(plugin.getDataFolder(), "pathfinder.yml");
@@ -78,7 +77,5 @@ public class PathfinderConfig {
         MAX_BLOCK_JUMP_DISTANCE = config.getInt("max_block_jump_distance", 3);
         MAX_SAFE_FALL_HEIGHT = config.getInt("max_safe_fall_height", 3);
         MAX_ITERATIONS = config.getInt("max_iterations", 10000);
-        ENABLE_PATH_CACHING = config.getBoolean("enable_path_caching", false);
     }
 }
-

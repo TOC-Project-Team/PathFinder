@@ -366,7 +366,10 @@ public class LanguageManager {
                 configFileConfig = YamlConfiguration.loadConfiguration(configLangFile);
             }
             
-            boolean hasChanges = syncConfigSections(jarConfig, configFileConfig, "");
+            boolean hasChanges = migrateLegacyLanguageKeys(configFileConfig);
+            if (syncConfigSections(jarConfig, configFileConfig, "")) {
+                hasChanges = true;
+            }
             
             if (hasChanges) {
                 configFileConfig.save(configLangFile);
@@ -488,13 +491,13 @@ public class LanguageManager {
             FileConfiguration defaultConfig = YamlConfiguration.loadConfiguration(
                     new InputStreamReader(defaultLangStream, StandardCharsets.UTF_8));
 
-            boolean hasChanges = false;
+            boolean hasChanges = migrateLegacyLanguageKeys(langConfig);
 
             if (isLanguageSwitch) {
-                hasChanges = validateAndUpdateSection(defaultConfig, langConfig, "", true);
+                hasChanges |= validateAndUpdateSection(defaultConfig, langConfig, "", true);
                 plugin.getLogger().info("检测到语言切换，正在同步所有翻译键值");
             } else {
-                hasChanges = validateAndUpdateSection(defaultConfig, langConfig, "", false);
+                hasChanges |= validateAndUpdateSection(defaultConfig, langConfig, "", false);
             }
 
             if (hasChanges) {
@@ -554,5 +557,15 @@ public class LanguageManager {
         }
 
         return hasChanges;
+    }
+
+    private boolean migrateLegacyLanguageKeys(FileConfiguration config) {
+        String currentKey = "messages.target-beacon-disappear";
+        String legacyKey = "messages.target-beacon-dissappear";
+        if (!config.contains(currentKey) && config.contains(legacyKey)) {
+            config.set(currentKey, config.get(legacyKey));
+            return true;
+        }
+        return false;
     }
 }

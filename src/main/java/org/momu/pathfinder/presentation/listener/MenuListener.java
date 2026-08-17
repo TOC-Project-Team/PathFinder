@@ -92,7 +92,7 @@ public class MenuListener {
                     if (!isNewTarget) {
                         player.sendMessage(
                                 ChatColor.YELLOW + LanguageManager.getInstance()
-                                        .getString("messages.already-navigating-to-player", target.getName()));
+                                        .getString(player, "messages.already-navigating-to-player", target.getName()));
                         MasterListener.guiManager.openPlayerNavigationMenu(player);
                         return;
                     }

@@ -5,7 +5,7 @@ import net.md_5.bungee.api.chat.BaseComponent;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
@@ -22,12 +22,13 @@ import java.util.function.Consumer;
 import static org.momu.pathfinder.runtime.TaskManager.arrivalNotifyCooldownUntil;
 
 public class PathFinding {
-    public static final Map<UUID, List<?>> lastPlayerPaths = new HashMap<>();
-    public static final Map<UUID, Location> lastPlayerPositions = new HashMap<>();
-    public static final Map<UUID, Location> lastTargetPositions = new HashMap<>();
-
     public static void startPathfinding(final Player player) {
-        new BukkitRunnable() {
+        final PathFinderPlugin plugin = PathFinderPlugin.getInstance();
+        if (!isPluginEnabled(plugin)) {
+            return;
+        }
+
+        runTaskIfEnabled(plugin, new BukkitRunnable() {
             @SuppressWarnings("deprecation")
             public void run() {
                 boolean isStronghold;
@@ -63,7 +64,7 @@ public class PathFinding {
                                     if (targetUUID == null) {
                                         player.sendMessage(
                                                 ChatColor.RED + LanguageManager.getInstance()
-                                                        .getString("messages.target-not-exist"));
+                                                        .getString(player, "messages.target-not-exist"));
                                         tracker.stopNavigation(player.getUniqueId());
                                         return;
                                     }
@@ -76,12 +77,12 @@ public class PathFinding {
                                             return;
                                         }
                                         boolean isTargetHidden = tracker.isLocationHidden(target.getUniqueId());
-                                        boolean canBypass = PathFinderPlugin.getInstance()
+                                        boolean canBypass = plugin
                                                 .canBypassNavigationRestrictions(player.getUniqueId());
                                         if (isTargetHidden && !canBypass) {
                                             player.sendMessage(
                                                     String.valueOf((Object) ChatColor.RED) + LanguageManager
-                                                            .getInstance().getString("messages.target-hidden"));
+                                                            .getInstance().getString(player, "messages.target-hidden"));
                                             tracker.stopNavigation(player.getUniqueId());
                                             return;
                                         }
@@ -90,14 +91,14 @@ public class PathFinding {
                                     } else {
                                         player.sendMessage(
                                                 String.valueOf((Object) ChatColor.RED) + LanguageManager.getInstance()
-                                                        .getString("messages.target-offline"));
+                                                        .getString(player, "messages.target-offline"));
                                         tracker.stopNavigation(player.getUniqueId());
                                         return;
                                     }
                                 }
                                 player.sendMessage(String.valueOf((Object) ChatColor.YELLOW) + LanguageManager
                                         .getInstance().getString(player, "messages.stronghold-searching-pathfinding"));
-                                new BukkitRunnable() {
+                                runTaskIfEnabled(plugin, new BukkitRunnable() {
                                     @Override
                                     public void run() {
                                         final Location strongholdLoc = player.getWorld().locateNearestStructure(
@@ -107,7 +108,7 @@ public class PathFinding {
                                                     + LanguageManager.getInstance().getString(player,
                                                             "messages.stronghold-not-found-large-range"));
                                             MasterListener.getGuiManager().toggleParticleFeature(player.getUniqueId());
-                                            if (PathFinderPlugin.getInstance().isEnabled()) {
+                                            if (isPluginEnabled(plugin)) {
                                                 MasterListener.getGuiManager().openMainMenu(player);
                                             }
                                             return;
@@ -120,7 +121,7 @@ public class PathFinding {
                                         tracker.setStrongholdNavigation(player.getUniqueId(), strongholdLocation);
                                         startPathfinding(player);
                                     }
-                                }.runTask((Plugin) PathFinderPlugin.getInstance());
+                                });
                                 return;
                             }
                         }
@@ -161,9 +162,9 @@ public class PathFinding {
 
                 TaskManager.removePlayerNavigationTask(player.getUniqueId());
 
-                BukkitTask pathfindingTask = new BukkitRunnable() {
+                BukkitTask pathfindingTask = runTaskTimerAsynchronouslyIfEnabled(plugin, new BukkitRunnable() {
                     public void run() {
-                        if (!PathFinderPlugin.getInstance().isEnabled()) {
+                        if (!isPluginEnabled(plugin)) {
                             this.cancel();
                             return;
                         }
@@ -231,13 +232,13 @@ public class PathFinding {
                                             return;
                                         }
                                         boolean isTargetHidden = tracker.isLocationHidden(target.getUniqueId());
-                                        boolean canBypass = PathFinderPlugin.getInstance()
+                                        boolean canBypass = plugin
                                                 .canBypassNavigationRestrictions(player.getUniqueId());
 
                                         if (target.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
                                             player.sendMessage(
                                                     String.valueOf((Object) ChatColor.YELLOW) + LanguageManager
-                                                            .getInstance().getString("messages.target-spectator"));
+                                                            .getInstance().getString(player, "messages.target-spectator"));
                                             this.cancel();
                                             MasterListener.getGuiManager().removeParticleTask(player.getUniqueId());
                                             tracker.stopNavigation(player.getUniqueId());
@@ -247,7 +248,7 @@ public class PathFinding {
                                         if (target.isDead()) {
                                             player.sendMessage(
                                                     String.valueOf((Object) ChatColor.YELLOW) + LanguageManager
-                                                            .getInstance().getString("messages.target-dead"));
+                                                            .getInstance().getString(player, "messages.target-dead"));
                                             this.cancel();
                                             MasterListener.getGuiManager().removeParticleTask(player.getUniqueId());
                                             tracker.stopNavigation(player.getUniqueId());
@@ -256,7 +257,7 @@ public class PathFinding {
                                         if (!player.getWorld().equals(target.getWorld())) {
                                             player.sendMessage(
                                                     String.valueOf((Object) ChatColor.RED) + LanguageManager
-                                                            .getInstance().getString("messages.target-dimension"));
+                                                            .getInstance().getString(player, "messages.target-dimension"));
                                             this.cancel();
                                             MasterListener.getGuiManager().removeParticleTask(player.getUniqueId());
                                             tracker.stopNavigation(player.getUniqueId());
@@ -266,7 +267,7 @@ public class PathFinding {
                                         if (isTargetHidden && !canBypass) {
                                             player.sendMessage(
                                                     String.valueOf((Object) ChatColor.RED) + LanguageManager
-                                                            .getInstance().getString("messages.target-hidden-2"));
+                                                            .getInstance().getString(player, "messages.target-hidden-2"));
                                             this.cancel();
                                             MasterListener.getGuiManager().removeParticleTask(player.getUniqueId());
                                             tracker.stopNavigation(player.getUniqueId());
@@ -275,7 +276,7 @@ public class PathFinding {
                                         currentTarget = target.getLocation().clone();
                                     } else {
                                         player.sendMessage(String.valueOf((Object) ChatColor.RED) + LanguageManager
-                                                .getInstance().getString("messages.target-offline"));
+                                                .getInstance().getString(player, "messages.target-offline"));
                                         this.cancel();
                                         MasterListener.getGuiManager().removeParticleTask(player.getUniqueId());
                                         tracker.stopNavigation(player.getUniqueId());
@@ -286,7 +287,7 @@ public class PathFinding {
                                     Block beaconBlock = currentTarget.getBlock();
                                     if (beaconBlock.getType() != Material.BEACON) {
                                         player.sendMessage(String.valueOf((Object) ChatColor.RED) + LanguageManager
-                                                .getInstance().getString("messages.target-beacon-dissappear"));
+                                                .getInstance().getString(player, "messages.target-beacon-disappear"));
                                         this.cancel();
                                         MasterListener.getGuiManager().removeParticleTask(player.getUniqueId());
                                         tracker.stopNavigation(player.getUniqueId());
@@ -367,65 +368,10 @@ public class PathFinding {
                                 playerBlockLoc.setX((double) playerBlockLoc.getBlockX());
                                 playerBlockLoc.setY((double) playerBlockLoc.getBlockY());
                                 playerBlockLoc.setZ((double) playerBlockLoc.getBlockZ());
-                                UUID playerUUID = player.getUniqueId();
-                                List<?> lastPath = lastPlayerPaths.get(playerUUID);
-                                Location lastPlayerPos = lastPlayerPositions.get(playerUUID);
-                                Location lastTargetPos = lastTargetPositions.get(playerUUID);
                                 path = null;
                                 if (Pathfinder.isPlayerInAir(player))
                                     break block32;
-                                boolean needRecalculate = true;
-                                if (Pathfinder.isPathCachingEnabled() && lastPath != null && !lastPath.isEmpty()
-                                        && lastPlayerPos != null && lastTargetPos != null) {
-                                    double playerMoveDist = playerBlockLoc.distance(lastPlayerPos);
-                                    double targetMoveDist = targetLoc.distance(lastTargetPos);
-                                    if (playerMoveDist < 3.0 && targetMoveDist < 0.1) {
-                                        boolean nearPath = false;
-                                        double minDistToPath = Double.MAX_VALUE;
-                                        for (Object nodeObj : lastPath) {
-                                            Pathfinder.Node node = (Pathfinder.Node) nodeObj;
-                                            double dist = playerBlockLoc.distance(node.location);
-                                            if (dist < minDistToPath) {
-                                                minDistToPath = dist;
-                                            }
-                                            if (!(dist < 2.0))
-                                                continue;
-                                            nearPath = true;
-                                            break;
-                                        }
-                                        if (nearPath || minDistToPath < 3.0) {
-                                            int nearestNodeIndex = 0;
-                                            double nearestDist = Double.MAX_VALUE;
-                                            for (int i = 0; i < lastPath.size(); ++i) {
-                                                Pathfinder.Node node = (Pathfinder.Node) lastPath.get(i);
-                                                double dist = playerBlockLoc.distance(node.location);
-                                                if (!(dist < nearestDist))
-                                                    continue;
-                                                nearestDist = dist;
-                                                nearestNodeIndex = i;
-                                            }
-                                            if (nearestNodeIndex < lastPath.size() - 1) {
-                                                path = new ArrayList<Pathfinder.Node>();
-                                                for (int j = nearestNodeIndex; j < lastPath.size(); j++) {
-                                                    path.add((Pathfinder.Node) lastPath.get(j));
-                                                }
-                                                needRecalculate = false;
-                                            }
-                                        }
-                                    }
-                                }
-                                if (needRecalculate) {
-                                    path = Pathfinder.findPath(playerBlockLoc, targetLoc, player);
-                                    if (Pathfinder.isPathCachingEnabled() && path != null && !path.isEmpty()) {
-                                        List<Pathfinder.Node> pathCopy = new ArrayList<>();
-                                        for (Pathfinder.Node node : path) {
-                                            pathCopy.add(node);
-                                        }
-                                        lastPlayerPaths.put(playerUUID, pathCopy);
-                                        lastPlayerPositions.put(playerUUID, playerBlockLoc.clone());
-                                        lastTargetPositions.put(playerUUID, targetLoc.clone());
-                                    }
-                                }
+                                path = Pathfinder.findPath(playerBlockLoc, targetLoc, player);
                                 break block33;
                             }
                             path = null;
@@ -433,9 +379,9 @@ public class PathFinding {
                         final Location finalTargetLoc = targetLoc;
                         final Location finalCurrentTarget = currentTarget;
                         final List<?> finalPath = path;
-                        new BukkitRunnable() {
+                        runTaskIfEnabled(plugin, new BukkitRunnable() {
                             public void run() {
-                                if (!PathFinderPlugin.getInstance().isEnabled()) {
+                                if (!isPluginEnabled(plugin)) {
                                     return;
                                 }
                                 if (!MasterListener.getGuiManager().isParticleFeatureEnabled(player.getUniqueId())) {
@@ -443,15 +389,7 @@ public class PathFinding {
                                 }
 
                                 if (player.isDead()) {
-                                    new BukkitRunnable() {
-                                        @Override
-                                        public void run() {
-                                            if (!PathFinderPlugin.getInstance().isEnabled()) {
-                                                return;
-                                            }
-                                            PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
-                                        }
-                                    }.runTask((Plugin) PathFinderPlugin.getInstance());
+                                    PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
                                     return;
                                 }
 
@@ -460,30 +398,18 @@ public class PathFinding {
                                     if (targetId != null) {
                                         Player target = Bukkit.getPlayer(targetId);
                                         if (target != null && target.isDead()) {
-                                            new BukkitRunnable() {
-                                                @Override
-                                                public void run() {
-                                                    PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
-                                                    player.sendMessage(String.valueOf((Object) ChatColor.YELLOW)
-                                                            + LanguageManager.getInstance()
-                                                                    .getString("messages.target-dead"));
-                                                }
-                                            }.runTask((Plugin) PathFinderPlugin.getInstance());
+                                            PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
+                                            player.sendMessage(String.valueOf((Object) ChatColor.YELLOW)
+                                                    + LanguageManager.getInstance().getString(player, "messages.target-dead"));
                                             return;
                                         }
                                     }
                                 }
 
                                 if (player.getGameMode() == GameMode.SPECTATOR) {
-                                    new BukkitRunnable() {
-                                        @Override
-                                        public void run() {
-                                            PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
-                                            player.sendMessage(
-                                                    String.valueOf((Object) ChatColor.YELLOW) + LanguageManager
-                                                            .getInstance().getString("messages.spectator-mode"));
-                                        }
-                                    }.runTask((Plugin) PathFinderPlugin.getInstance());
+                                    PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
+                                    player.sendMessage(String.valueOf((Object) ChatColor.YELLOW)
+                                            + LanguageManager.getInstance().getString(player, "messages.spectator-mode"));
                                     return;
                                 }
 
@@ -515,23 +441,18 @@ public class PathFinding {
                                     MasterListener.getGuiManager().removeParticleTask(pid);
                                     PlayerTracker.getInstance().stopNavigation(pid);
                                     if (canNotify) {
-                                        new BukkitRunnable() {
-                                            @Override
-                                            public void run() {
-                                                player.sendMessage(String.valueOf((Object) ChatColor.GREEN)
-                                                        + LanguageManager.getInstance()
-                                                                .getString(player, "messages.arrive-destination"));
-                                                player.playSound(player.getLocation(),
-                                                        Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5f, 1.2f);
-                                            }
-                                        }.runTask((Plugin) PathFinderPlugin.getInstance());
+                                        player.sendMessage(String.valueOf((Object) ChatColor.GREEN)
+                                                + LanguageManager.getInstance()
+                                                        .getString(player, "messages.arrive-destination"));
+                                        player.playSound(player.getLocation(),
+                                                Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5f, 1.2f);
                                         long expirySnapshot = newExpiry[0];
-                                        new BukkitRunnable() {
+                                        runTaskLaterIfEnabled(plugin, new BukkitRunnable() {
                                             @Override
                                             public void run() {
                                                 arrivalNotifyCooldownUntil.compute(pid, (k, v) -> (v != null && v == expirySnapshot) ? null : v);
                                             }
-                                        }.runTaskLater((Plugin) PathFinderPlugin.getInstance(), 60L);
+                                        }, 60L);
                                     }
                                     return;
                                 }
@@ -539,6 +460,16 @@ public class PathFinding {
                                 if (finalPath != null && !finalPath.isEmpty()) {
                                     int maxDrawNodes = Math.min((int) finalPath.size(),
                                             (int) PathfinderConfig.MAX_PARTICLE_DISTANCE);
+                                    Set<Location> outlinedBreakBlocks = new HashSet<>();
+                                    for (int nodeIndex = 0; nodeIndex < maxDrawNodes; nodeIndex++) {
+                                        Pathfinder.Node node = (Pathfinder.Node) finalPath.get(nodeIndex);
+                                        for (Location blockLoc : node.blocksToBreak) {
+                                            if (outlinedBreakBlocks.add(blockLoc)) {
+                                                ParticleGen.drawBlockOutline(player, blockLoc, Color.RED, 0.2);
+                                            }
+                                        }
+                                    }
+
                                     for (int i = 0; i < maxDrawNodes - 1; ++i) {
                                         Pathfinder.Node currentNode = (Pathfinder.Node) finalPath.get(i);
                                         Pathfinder.Node nextNode = (Pathfinder.Node) finalPath.get(i + 1);
@@ -583,7 +514,7 @@ public class PathFinding {
                                         Particle particleType = Particle.DUST;
                                         Color particleColor = Color.WHITE;
                                         float particleSize = PathfinderConfig.PARTICLE_SIZE;
-                                        switch (currentNode.moveType) {
+                                        switch (nextNode.moveType) {
                                             case 3: {
                                                 particleColor = Color.YELLOW;
                                                 break;
@@ -602,14 +533,8 @@ public class PathFinding {
                                                 break;
                                             }
                                         }
-                                        if (currentNode.toBreak) {
-                                            Location blockLoc = currentNode.location.clone();
-                                            ParticleGen.drawBlockOutline(player, blockLoc, Color.RED, 0.2);
-                                            ParticleGen.drawBlockOutline(player,
-                                                    blockLoc.clone().add(0.0, 1.0, 0.0), Color.RED, 0.2);
-                                            ParticleGen.drawBlockOutline(player,
-                                                    blockLoc.clone().add(0.0, -1.0, 0.0), Color.RED, 0.2);
-                                        } else {
+                                        boolean breakTransition = currentNode.toBreak || nextNode.toBreak;
+                                        if (!breakTransition) {
                                             Block block = currentNode.location.getBlock();
                                             if (Pathfinder.isLadder(block)) {
                                                 Location blockLoc = currentNode.location.clone();
@@ -662,6 +587,9 @@ public class PathFinding {
                                                 }
                                             } else if (currentNode.isBanner) {
                                             }
+                                        }
+                                        if (breakTransition) {
+                                            continue;
                                         }
                                         if (!(distance > PathfinderConfig.PARTICLE_SPACING)) {
                                             player.spawnParticle(particleType, end, 1, 0.0, 0.0, 0.0, 0.0,
@@ -719,15 +647,76 @@ public class PathFinding {
                                     }
                                 }
                             }
-                        }.runTask((Plugin) PathFinderPlugin.getInstance());
+                        });
                     }
-                }.runTaskTimerAsynchronously((Plugin) PathFinderPlugin.getInstance(), 0L, PathfinderConfig.PATH_REFRESH_TICKS);
-                if (PathFinderPlugin.getInstance().isEnabled()) {
+                }, 0L, PathfinderConfig.PATH_REFRESH_TICKS);
+                if (pathfindingTask != null && isPluginEnabled(plugin)) {
                     MasterListener.getGuiManager().addParticleTask(player.getUniqueId(), pathfindingTask);
                     TaskManager.addPlayerNavigationTask(player.getUniqueId(), pathfindingTask);
                 }
             }
-        }.runTask((Plugin) PathFinderPlugin.getInstance());
+        });
+    }
+
+    private static boolean isPluginEnabled(PathFinderPlugin plugin) {
+        return plugin != null && plugin.isEnabled();
+    }
+
+    private static BukkitTask runTaskIfEnabled(PathFinderPlugin plugin, BukkitRunnable task) {
+        if (!isPluginEnabled(plugin)) {
+            return null;
+        }
+        try {
+            return task.runTask(plugin);
+        } catch (IllegalPluginAccessException ignored) {
+            return null;
+        }
+    }
+
+    private static BukkitTask runTaskLaterIfEnabled(PathFinderPlugin plugin, BukkitRunnable task, long delay) {
+        if (!isPluginEnabled(plugin)) {
+            return null;
+        }
+        try {
+            return task.runTaskLater(plugin, delay);
+        } catch (IllegalPluginAccessException ignored) {
+            return null;
+        }
+    }
+
+    private static BukkitTask runTaskTimerAsynchronouslyIfEnabled(PathFinderPlugin plugin, BukkitRunnable task,
+            long delay, long period) {
+        if (!isPluginEnabled(plugin)) {
+            return null;
+        }
+        try {
+            return task.runTaskTimerAsynchronously(plugin, delay, period);
+        } catch (IllegalPluginAccessException ignored) {
+            return null;
+        }
+    }
+
+    private static BukkitTask runTaskAsynchronouslyIfEnabled(PathFinderPlugin plugin, BukkitRunnable task) {
+        if (!isPluginEnabled(plugin)) {
+            return null;
+        }
+        try {
+            return task.runTaskAsynchronously(plugin);
+        } catch (IllegalPluginAccessException ignored) {
+            return null;
+        }
+    }
+
+    private static BukkitTask runTaskLaterAsynchronouslyIfEnabled(PathFinderPlugin plugin, BukkitRunnable task,
+            long delay) {
+        if (!isPluginEnabled(plugin)) {
+            return null;
+        }
+        try {
+            return task.runTaskLaterAsynchronously(plugin, delay);
+        } catch (IllegalPluginAccessException ignored) {
+            return null;
+        }
     }
 
     @SuppressWarnings("deprecation")
@@ -763,7 +752,7 @@ public class PathFinding {
             if (strongholdLoc.getBlock().getType() != Material.END_PORTAL_FRAME
                     && player.getLocation().distance(strongholdLoc) < 300.0) {
                 findNearestPortalFrameAsync(strongholdLoc, 150, portalFrame -> {
-                    if (!PathFinderPlugin.getInstance().isEnabled()) {
+                    if (!isPluginEnabled(PathFinderPlugin.getInstance())) {
                         return;
                     }
                     if (portalFrame != null) {
@@ -841,28 +830,37 @@ public class PathFinding {
     }
 
     public static void findNearestPortalFrameAsync(Location center, int radius, Consumer<Location> callback) {
-        new BukkitRunnable() {
+        final PathFinderPlugin plugin = PathFinderPlugin.getInstance();
+        if (!isPluginEnabled(plugin)) {
+            return;
+        }
+
+        runTaskAsynchronouslyIfEnabled(plugin, new BukkitRunnable() {
             @Override
             public void run() {
-                if (!PathFinderPlugin.getInstance().isEnabled()) {
-                    callback.accept(null);
+                if (!isPluginEnabled(plugin)) {
                     return;
                 }
 
                 Location nearestFrame = findNearestPortalFrame(center, radius);
 
-                new BukkitRunnable() {
+                runTaskIfEnabled(plugin, new BukkitRunnable() {
                     @Override
                     public void run() {
                         callback.accept(nearestFrame);
                     }
-                }.runTask(PathFinderPlugin.getInstance());
+                });
             }
-        }.runTaskAsynchronously(PathFinderPlugin.getInstance());
+        });
     }
 
     @SuppressWarnings("deprecation")
     public static void findNearestBeaconAsync(Player player, int maxRadius, Consumer<Location> callback) {
+        final PathFinderPlugin plugin = PathFinderPlugin.getInstance();
+        if (!isPluginEnabled(plugin)) {
+            return;
+        }
+
         Location playerLocation = player.getLocation().clone();
         World world = playerLocation.getWorld();
         if (world == null) {
@@ -880,13 +878,13 @@ public class PathFinding {
                 + LanguageManager.getInstance().getString(player, "messages.searching-for-beacon", taskId));
         player.sendMessage(String.valueOf((Object) ChatColor.GRAY)
                 + LanguageManager.getInstance().getString(player, "messages.search-radius", maxRadius)
-                + "，"
+                + ", "
                 + LanguageManager.getInstance().getString(player, "messages.player-location",
                         playerLocation.getBlockX(), playerLocation.getBlockY(), playerLocation.getBlockZ()));
 
         final boolean[] callbackCalled = { false };
 
-        BukkitTask searchTask = new BukkitRunnable() {
+        BukkitTask searchTask = runTaskAsynchronouslyIfEnabled(plugin, new BukkitRunnable() {
             @Override
             public void run() {
                 final BeaconSearchResult result = new BeaconSearchResult();
@@ -950,10 +948,10 @@ public class PathFinding {
 
                 final Location finalNearestBeacon = result.nearestBeacon;
                 if (!this.isCancelled()) {
-                    new BukkitRunnable() {
+                    runTaskIfEnabled(plugin, new BukkitRunnable() {
                         @Override
                         public void run() {
-                            if (!PathFinderPlugin.getInstance().isEnabled()) {
+                            if (!isPluginEnabled(plugin)) {
                                 return;
                             }
 
@@ -985,25 +983,29 @@ public class PathFinding {
                                 callback.accept(null);
                             }
                         }
-                    }.runTask(PathFinderPlugin.getInstance());
+                    });
                 }
             }
-        }.runTaskAsynchronously(PathFinderPlugin.getInstance());
+        });
 
-        BukkitTask timeoutTask = new BukkitRunnable() {
+        if (searchTask == null) {
+            return;
+        }
+
+        BukkitTask timeoutTask = runTaskLaterAsynchronouslyIfEnabled(plugin, new BukkitRunnable() {
             @Override
             public void run() {
-                if (!PathFinderPlugin.getInstance().isEnabled()) {
+                if (!isPluginEnabled(plugin)) {
                     searchTask.cancel();
                     return;
                 }
 
                 if (!searchTask.isCancelled()) {
                     searchTask.cancel();
-                    new BukkitRunnable() {
+                    runTaskIfEnabled(plugin, new BukkitRunnable() {
                         @Override
                         public void run() {
-                            if (!PathFinderPlugin.getInstance().isEnabled()) {
+                            if (!isPluginEnabled(plugin)) {
                                 return;
                             }
 
@@ -1024,10 +1026,15 @@ public class PathFinding {
                                 callback.accept(null);
                             }
                         }
-                    }.runTask(PathFinderPlugin.getInstance());
+                    });
                 }
             }
-        }.runTaskLaterAsynchronously(PathFinderPlugin.getInstance(), 20 * 20);
+        }, 20 * 20);
+
+        if (timeoutTask == null) {
+            searchTask.cancel();
+            return;
+        }
 
         TaskManager.addBeaconSearchTask(playerId, searchTask, timeoutTask);
     }
