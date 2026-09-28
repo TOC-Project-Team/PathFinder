@@ -13,6 +13,7 @@ import org.momu.pathfinder.navigation.state.PlayerTracker;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
 import org.momu.pathfinder.config.LanguageManager;
 import org.momu.pathfinder.navigation.runtime.PathFinding;
+import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 
 public class MenuListener {
     @SuppressWarnings("deprecation")
@@ -40,7 +41,7 @@ public class MenuListener {
                 break;
             }
             case ENDER_PEARL: {
-                PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
+                PlayerTracker.getInstance().stopNavigation(player.getUniqueId(), StopReason.CANCELLED);
                 player.sendMessage(ChatColor.YELLOW
                         + LanguageManager.getInstance().getString(player, "messages.navigation-stopped"));
                 player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.5f, 0.5f);
@@ -90,9 +91,13 @@ public class MenuListener {
                     boolean isNewTarget = PlayerTracker.getInstance().setNavigationTarget(player.getUniqueId(),
                             target.getUniqueId());
                     if (!isNewTarget) {
-                        player.sendMessage(
-                                ChatColor.YELLOW + LanguageManager.getInstance()
-                                        .getString(player, "messages.already-navigating-to-player", target.getName()));
+                        boolean alreadyNavigating = target.getUniqueId()
+                                .equals(PlayerTracker.getInstance().getNavigationTarget(player.getUniqueId()));
+                        player.sendMessage(alreadyNavigating
+                                ? ChatColor.YELLOW + LanguageManager.getInstance()
+                                        .getString(player, "messages.already-navigating-to-player", target.getName())
+                                : ChatColor.RED + LanguageManager.getInstance()
+                                        .getString(player, "messages.nav-start-cancelled"));
                         MasterListener.guiManager.openPlayerNavigationMenu(player);
                         return;
                     }
@@ -153,7 +158,12 @@ public class MenuListener {
                         player.sendMessage(ChatColor.GRAY + LanguageManager.getInstance()
                                 .getString(player, "messages.stronghold-coordinates", strongholdLoc.getBlockX(),
                                         strongholdLoc.getBlockY(), strongholdLoc.getBlockZ()));
-                        PlayerTracker.getInstance().setStrongholdNavigation(player.getUniqueId(), strongholdLoc);
+                        if (!PlayerTracker.getInstance().setStrongholdNavigation(player.getUniqueId(), strongholdLoc)) {
+                            player.sendMessage(ChatColor.RED + LanguageManager.getInstance()
+                                    .getString(player, "messages.nav-start-cancelled"));
+                            MasterListener.guiManager.openPlayerNavigationMenu(player);
+                            return;
+                        }
                         player.sendMessage(ChatColor.GREEN + LanguageManager.getInstance()
                                 .getString(player, "messages.stronghold-navigation-set"));
                         player.playSound(player.getLocation(), Sound.ENTITY_ENDERMAN_TELEPORT, 0.5f, 1.0f);
@@ -186,7 +196,11 @@ public class MenuListener {
                         new BukkitRunnable() {
                             @Override
                             public void run() {
-                                PlayerTracker.getInstance().setBeaconNavigation(player.getUniqueId(), beaconLoc);
+                                if (!PlayerTracker.getInstance().setBeaconNavigation(player.getUniqueId(), beaconLoc)) {
+                                    player.sendMessage(ChatColor.RED + LanguageManager.getInstance()
+                                            .getString(player, "messages.nav-start-cancelled"));
+                                    return;
+                                }
                                 player.sendMessage(ChatColor.GREEN
                                         + LanguageManager.getInstance().getString(player,
                                                 "messages.beacon-navigation-set"));

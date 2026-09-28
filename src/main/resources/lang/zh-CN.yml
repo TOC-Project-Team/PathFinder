@@ -163,6 +163,7 @@ messages:
   nav-rename-fail: "重命名失败（重名或不存在）"
   nav-start-ok: "已让玩家开始导航到: {0}"
   nav-go-started: "已开始导航到: {0}"
+  nav-start-cancelled: "无法开始导航。"
   nav-stop-ok: "已停止导航"
   nav-stop-other-none: "玩家 {0} 当前没有进行导航"
   nav-stop-other-ok: "已停止玩家 {0} 的导航，目的地为 {1}"

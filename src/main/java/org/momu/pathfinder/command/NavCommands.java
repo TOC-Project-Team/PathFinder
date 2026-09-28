@@ -9,6 +9,7 @@ import org.momu.pathfinder.navigation.state.PlayerTracker;
 import org.momu.pathfinder.waypoint.model.Waypoint;
 import org.momu.pathfinder.waypoint.service.WaypointService;
 import org.momu.pathfinder.config.LanguageManager;
+import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -277,7 +278,6 @@ public final class NavCommands {
             throw new IllegalArgumentException(LanguageManager.getInstance().getString(
                     sender instanceof Player ? (Player) sender : null, "messages.global-navigation-disabled"));
         }
-        PlayerTracker.getInstance().stopNavigation(target.getUniqueId());
         boolean noBar = false;
         if (t.size() >= 4) {
             for (int i = 3; i < t.size(); i++) {
@@ -288,7 +288,10 @@ public final class NavCommands {
                 }
             }
         }
-        NavigationService.getInstance().startForPlayer(target, wp.toLocation(), wp.getName());
+        if (!NavigationService.getInstance().startForPlayer(target, wp.toLocation(), wp.getName())) {
+            throw new IllegalArgumentException(LanguageManager.getInstance()
+                    .getString(sender instanceof Player ? (Player) sender : null, "messages.nav-start-cancelled"));
+        }
         if (noBar) {
             PlayerTracker.getInstance().suppressActionBarForCurrentSession(target.getUniqueId());
         }
@@ -317,7 +320,10 @@ public final class NavCommands {
             throw new IllegalArgumentException(
                     LanguageManager.getInstance().getString(player, "messages.global-navigation-disabled"));
         }
-        NavigationService.getInstance().startForPlayer(player, wp.toLocation(), wp.getName());
+        if (!NavigationService.getInstance().startForPlayer(player, wp.toLocation(), wp.getName())) {
+            throw new IllegalArgumentException(
+                    LanguageManager.getInstance().getString(player, "messages.nav-start-cancelled"));
+        }
         ok(sender, LanguageManager.getInstance().getString(player, "messages.nav-go-started", wp.getName()));
     }
 
@@ -357,7 +363,7 @@ public final class NavCommands {
             if (dest == null && PlayerTracker.getInstance().getStrongholdNavigation(tid) != null) {
                 dest = LanguageManager.getInstance().getString(sender instanceof Player ? (Player) sender : null, "messages.stronghold-name");
             }
-            PlayerTracker.getInstance().stopNavigation(tid);
+            PlayerTracker.getInstance().stopNavigation(tid, StopReason.CANCELLED);
             sender.sendMessage("§a" + LanguageManager.getInstance().getString(sender instanceof Player ? (Player) sender : null, "messages.nav-stop-other-ok", target.getName(), (dest == null ? LanguageManager.getInstance().getString("messages.unknown") : dest)));
             return;
         }
@@ -365,7 +371,7 @@ public final class NavCommands {
             throw new IllegalArgumentException(LanguageManager.getInstance().getString("messages.player-usage"));
         }
         requirePerm(player, "toc.nav.stop");
-        PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
+        PlayerTracker.getInstance().stopNavigation(player.getUniqueId(), StopReason.CANCELLED);
         ok(sender, LanguageManager.getInstance().getString(player, "messages.nav-stop-ok"));
     }
 

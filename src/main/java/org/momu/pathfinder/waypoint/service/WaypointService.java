@@ -76,6 +76,20 @@ public class WaypointService {
         return true;
     }
 
+    public synchronized boolean move(String name, String world, double x, double y, double z) {
+        Waypoint wp = waypoints.get(KeyUtils.normalizeKey(name));
+        if (wp == null) return false;
+        World w = Bukkit.getWorld(world);
+        if (w == null) return false;
+        if (y < w.getMinHeight() || y >= w.getMaxHeight()) return false;
+        wp.setWorld(world);
+        wp.setX(x);
+        wp.setY(y);
+        wp.setZ(z);
+        saveAsync();
+        return true;
+    }
+
     public synchronized Waypoint get(String nameOrKey) {
         return waypoints.get(KeyUtils.normalizeKey(nameOrKey));
     }
