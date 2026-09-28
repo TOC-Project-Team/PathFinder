@@ -1,5 +1,7 @@
 package org.momu.pathfinder.bootstrap;
 
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
@@ -33,7 +35,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class PathFinderPlugin extends JavaPlugin {
 
+    private static final int BSTATS_PLUGIN_ID = 34371;
+
     private static PathFinderPlugin instance;
+
+    private Metrics metrics;
 
     private WatchService watchService;
     private ExecutorService watchExecutor;
@@ -54,6 +60,7 @@ public final class PathFinderPlugin extends JavaPlugin {
             initializeServices();
             registerJavaEntrypoints();
             registerApi();
+            startMetrics();
             startConfigFileWatcher();
             getLogger().info("PathFinder enabled successfully.");
         } catch (Exception e) {
@@ -66,6 +73,7 @@ public final class PathFinderPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         stopConfigFileWatcher();
+        stopMetrics();
         unregisterApi();
         try {
             PlayerTracker.getInstance().stopAllNavigations();
@@ -127,6 +135,39 @@ public final class PathFinderPlugin extends JavaPlugin {
     private void unregisterApi() {
         getServer().getServicesManager().unregisterAll(this);
         PathFinderProvider.unregister();
+    }
+
+    private void startMetrics() {
+        if (!getConfig().getBoolean("metrics", true)) {
+            return;
+        }
+        try {
+            metrics = new Metrics(this, BSTATS_PLUGIN_ID);
+            metrics.addCustomChart(new SimplePie("language",
+                    () -> LanguageManager.getInstance().getCurrentLanguage()));
+            metrics.addCustomChart(new SimplePie("waypoint_count",
+                    () -> bucketWaypointCount(WaypointService.getInstance().list(null).size())));
+            metrics.addCustomChart(new SimplePie("allow_navigation_to_invisible",
+                    () -> String.valueOf(getConfig().getBoolean("allow_navigation_to_invisible", false))));
+        } catch (Exception e) {
+            getLogger().warning("Failed to start bStats metrics: " + e.getMessage());
+        }
+    }
+
+    private void stopMetrics() {
+        if (metrics != null) {
+            metrics.shutdown();
+            metrics = null;
+        }
+    }
+
+    private static String bucketWaypointCount(int count) {
+        if (count == 0) return "0";
+        if (count <= 5) return "1-5";
+        if (count <= 20) return "6-20";
+        if (count <= 50) return "21-50";
+        if (count <= 100) return "51-100";
+        return "100+";
     }
 
     public void reloadConfigurations() {

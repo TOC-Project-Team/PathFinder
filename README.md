@@ -77,12 +77,14 @@ Main plugin configuration:
 ```yaml
 language: "en-US"
 allow_navigation_to_invisible: false
+metrics: true
 ```
 
 Configuration notes:
 
 - `language` sets the default plugin language.
 - `allow_navigation_to_invisible` controls whether invisible target players can still be navigated to.
+- `metrics` toggles anonymous usage statistics sent to [bStats](https://bstats.org/plugin/bukkit/PathFinder/34371). Server owners can also opt out globally in `plugins/bStats/config.yml`.
 
 ### `pathfinder.yml`
 
