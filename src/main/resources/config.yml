@@ -5,6 +5,6 @@ language: "en-US"
 # false: 禁止导航到隐身玩家
 allow_navigation_to_invisible: false
 
-# 是否启用 bStats 匿名统计 (plugin id 34371)
+# 是否启用 bStats 匿名统计
 # Whether to send anonymous usage statistics to bStats
 metrics: true
