@@ -27,6 +27,7 @@ import org.momu.pathfinder.bootstrap.PathFinderPlugin;
 import org.momu.pathfinder.runtime.TaskManager;
 import org.momu.pathfinder.config.LanguageManager;
 import org.momu.pathfinder.navigation.runtime.PathFinding;
+import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 
 public class MasterListener
         implements Listener {
@@ -102,7 +103,7 @@ public class MasterListener
 
         if (event.getNewGameMode() == org.bukkit.GameMode.SPECTATOR) {
             if (PlayerTracker.getInstance().isNavigating(player.getUniqueId())) {
-                PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
+                PlayerTracker.getInstance().stopNavigation(player.getUniqueId(), StopReason.GAME_MODE_CHANGED);
                 player.sendMessage(ChatColor.YELLOW
                         + LanguageManager.getInstance().getString(player, "messages.spectator-mode"));
             }
@@ -118,7 +119,7 @@ public class MasterListener
         PlayerTracker tracker = PlayerTracker.getInstance();
 
         if (tracker.isNavigating(player.getUniqueId())) {
-            tracker.stopNavigation(player.getUniqueId());
+            tracker.stopNavigation(player.getUniqueId(), StopReason.PLAYER_DIED);
             player.sendMessage(ChatColor.YELLOW
                     + LanguageManager.getInstance().getString(player, "messages.death-navi"));
         }
@@ -132,7 +133,7 @@ public class MasterListener
 
                 navigatingToDeadPlayer.add(navigatingPlayerUUID);
 
-                tracker.stopNavigation(navigatingPlayerUUID);
+                tracker.stopNavigation(navigatingPlayerUUID, StopReason.TARGET_UNAVAILABLE);
                 onlinePlayer.sendMessage(ChatColor.YELLOW
                         + LanguageManager.getInstance().getString(onlinePlayer, "messages.death-navi-2"));
             }
@@ -184,12 +185,20 @@ public class MasterListener
         }
     }
 
+    @org.bukkit.event.EventHandler
+    public void onPlayerQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        UUID playerUUID = event.getPlayer().getUniqueId();
+        if (PlayerTracker.getInstance().isNavigating(playerUUID)) {
+            PlayerTracker.getInstance().stopNavigation(playerUUID, StopReason.PLAYER_QUIT);
+        }
+    }
+
     @SuppressWarnings("deprecation")
     @org.bukkit.event.EventHandler
     public void onPlayerChangedWorld(PlayerChangedWorldEvent event) {
         org.bukkit.entity.Player player = event.getPlayer();
         if (PlayerTracker.getInstance().isNavigating(player.getUniqueId())) {
-            PlayerTracker.getInstance().stopNavigation(player.getUniqueId());
+            PlayerTracker.getInstance().stopNavigation(player.getUniqueId(), StopReason.WORLD_CHANGED);
             player.sendMessage(ChatColor.YELLOW + LanguageManager.getInstance().getString(player, "messages.navigation-stopped"));
         }
     }
@@ -200,7 +209,7 @@ public class MasterListener
         org.bukkit.World world = event.getWorld();
         for (org.bukkit.entity.Player p : world.getPlayers()) {
             if (PlayerTracker.getInstance().isNavigating(p.getUniqueId())) {
-                PlayerTracker.getInstance().stopNavigation(p.getUniqueId());
+                PlayerTracker.getInstance().stopNavigation(p.getUniqueId(), StopReason.WORLD_CHANGED);
                 p.sendMessage(ChatColor.YELLOW + LanguageManager.getInstance().getString(p, "messages.navigation-stopped"));
             }
         }

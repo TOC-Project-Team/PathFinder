@@ -157,7 +157,7 @@ This script:
 The main artifact produced by `./scripts/build-fatjar.sh` is written to:
 
 ```text
-.gradle-build/libs/PathFinder-1.7.0-all.jar
+.gradle-build/libs/PathFinder-1.8.0-all.jar
 ```
 
 The script resolves the final file from `.gradle-build/libs/*-all.jar`, so the exact filename follows the version declared in `build.gradle`.
@@ -202,6 +202,144 @@ This is a faster build path that skips the full clean step and runs `shadowJar` 
 ├── src/main/java/
 └── src/main/resources/
 ```
+
+---
+
+## Developer API
+
+Other plugins can control PathFinder through a Java API: start and stop navigation, manage waypoints, and listen to navigation events.
+
+### Setup
+
+1. Add PathFinder to your plugin's `plugin.yml`:
+
+   ```yaml
+   depend: [PathFinder]      # or softdepend: [PathFinder] if PathFinder is optional
+   ```
+
+2. Add PathFinder as a `compileOnly` dependency. It is already on the server at runtime, so do **not** shade it. PathFinder is available through [JitPack](https://jitpack.io/#TOC-Project-Team/PathFinder-source):
+
+   Gradle:
+
+   ```groovy
+   repositories {
+       maven { url 'https://jitpack.io' }
+   }
+
+   dependencies {
+       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.8.0'
+   }
+   ```
+
+   Maven:
+
+   ```xml
+   <repositories>
+       <repository>
+           <id>jitpack.io</id>
+           <url>https://jitpack.io</url>
+       </repository>
+   </repositories>
+
+   <dependency>
+       <groupId>com.github.TOC-Project-Team</groupId>
+       <artifactId>PathFinder-source</artifactId>
+       <version>1.8.0</version>
+       <scope>provided</scope>
+   </dependency>
+   ```
+
+   Alternatively, put the release jar in your project and use `compileOnly files('libs/PathFinder-1.8.0-all.jar')`.
+
+3. Get the API instance:
+
+   ```java
+   import org.momu.pathfinder.api.PathFinderAPI;
+   import org.momu.pathfinder.api.PathFinderProvider;
+
+   PathFinderAPI api = PathFinderProvider.get();
+   // or: Bukkit.getServicesManager().load(PathFinderAPI.class);
+   ```
+
+   With `softdepend`, check `PathFinderProvider.isAvailable()` first. Call API methods from the main server thread.
+
+### Navigation
+
+```java
+// Guide a player to any location (must be in the player's world)
+NavigationResult result = api.navigateToLocation(player, location, "Quest Target");
+if (!result.isSuccess()) {
+    player.sendMessage("Cannot navigate: " + result);
+}
+
+// Hide the distance/direction action bar, particles only
+api.navigateToLocation(player, location, "Hidden Treasure", false);
+
+// Saved waypoint (same as /toc nav go <name>)
+api.navigateToWaypoint(player, "spawn");
+
+// Follow another player (honours the target's location-privacy setting)
+api.navigateToPlayer(player, targetPlayer);
+
+// Stop / query
+api.stopNavigation(player);
+api.isNavigating(player.getUniqueId());
+api.getSession(player.getUniqueId()).ifPresent(session ->
+        getLogger().info(session.type() + " -> " + session.targetLocation()));
+api.getActiveSessions();
+```
+
+`NavigationResult` values: `SUCCESS`, `PLAYER_OFFLINE`, `INVALID_TARGET`, `WAYPOINT_NOT_FOUND`, `WORLD_MISMATCH`, `TARGET_UNAVAILABLE`, `ALREADY_NAVIGATING`, `NAVIGATION_DISABLED`, `CANCELLED`.
+
+### Waypoints
+
+```java
+api.createWaypoint("market", location);   // name: 1-32 characters, case-insensitive, unique
+api.moveWaypoint("market", newLocation);
+api.renameWaypoint("market", "bazaar");
+api.removeWaypoint("bazaar");
+
+Optional<WaypointSnapshot> wp = api.getWaypoint("spawn");
+List<WaypointSnapshot> all = api.getWaypoints();
+List<WaypointSnapshot> inWorld = api.getWaypoints(world);
+```
+
+Waypoints created through the API are saved to `waypoints.yml` and appear in `/toc nav list` like any other waypoint.
+
+### Global settings
+
+```java
+api.setNavigationEnabled(false);                 // same as the admin GUI toggle
+api.setLocationHidden(player.getUniqueId(), true); // same as the "hide my location" button
+```
+
+### Events
+
+All events are in `org.momu.pathfinder.api.event` and carry the player and a `NavigationSession` snapshot (`type`, `targetLocation`, `targetPlayerId`, `displayName`).
+
+| Event | When | Notes |
+| --- | --- | --- |
+| `PathFinderNavigationStartEvent` | Before any navigation starts (GUI, command or API) | Cancellable |
+| `PathFinderNavigationArriveEvent` | The player reached the target | Followed by a stop event with reason `ARRIVED` |
+| `PathFinderNavigationStopEvent` | A navigation ended | `getReason()`: `ARRIVED`, `CANCELLED`, `API`, `REPLACED`, `TARGET_UNAVAILABLE`, `PLAYER_DIED`, `PLAYER_QUIT`, `WORLD_CHANGED`, `GAME_MODE_CHANGED`, `NAVIGATION_DISABLED`, `PLUGIN_DISABLED`, `OTHER` |
+
+```java
+@EventHandler
+public void onArrive(PathFinderNavigationArriveEvent event) {
+    if ("Quest Target".equals(event.getSession().displayName())) {
+        event.getPlayer().sendMessage("Quest objective reached!");
+    }
+}
+
+@EventHandler
+public void onStart(PathFinderNavigationStartEvent event) {
+    if (event.getSession().type() == NavigationType.STRONGHOLD && !event.getPlayer().hasPermission("myplugin.stronghold")) {
+        event.setCancelled(true);
+    }
+}
+```
+
+Stop events raised by PathFinder's asynchronous path worker (for example when a target player goes offline) are fired asynchronously; check `event.isAsynchronous()` before touching the world from such a listener.
 
 ---
 

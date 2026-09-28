@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'maven-publish'
     id 'com.github.johnrengelman.shadow' version '7.1.2'
     id 'xyz.jpenilla.run-paper' version '2.3.1'
 }
@@ -7,7 +8,7 @@ plugins {
 buildDir = file('.gradle-build')
 
 group = 'org.momu.tocplugin'
-version = '1.7.0'
+version = '1.8.0'
 
 repositories {
     mavenCentral()
@@ -28,6 +29,7 @@ dependencies {
 
 java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -46,6 +48,16 @@ processResources {
 
 shadowJar {
     configurations = [project.configurations.runtimeClasspath]
+}
+
+// Publishes the plain (unshaded) jar so plugins can depend on PathFinder's API,
+// e.g. through JitPack: com.github.TOC-Project-Team:PathFinder-source:<tag>
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
 }
 
 tasks.assemble.dependsOn(tasks.shadowJar)

@@ -3,9 +3,13 @@ package org.momu.pathfinder.bootstrap;
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.momu.pathfinder.api.PathFinderAPI;
+import org.momu.pathfinder.api.PathFinderProvider;
 import org.momu.pathfinder.command.MainCommand;
 import org.momu.pathfinder.config.LanguageManager;
+import org.momu.pathfinder.integration.PathFinderApiImpl;
 import org.momu.pathfinder.navigation.algorithm.Pathfinder;
 import org.momu.pathfinder.navigation.state.PlayerTracker;
 import org.momu.pathfinder.presentation.listener.MasterListener;
@@ -49,6 +53,7 @@ public final class PathFinderPlugin extends JavaPlugin {
             ensureDataFiles();
             initializeServices();
             registerJavaEntrypoints();
+            registerApi();
             startConfigFileWatcher();
             getLogger().info("PathFinder enabled successfully.");
         } catch (Exception e) {
@@ -61,6 +66,7 @@ public final class PathFinderPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         stopConfigFileWatcher();
+        unregisterApi();
         try {
             PlayerTracker.getInstance().stopAllNavigations();
             PlayerTracker.getInstance().saveData(this);
@@ -110,6 +116,17 @@ public final class PathFinderPlugin extends JavaPlugin {
         toc.setTabCompleter(mainCommand);
 
         getServer().getPluginManager().registerEvents(new MasterListener(), this);
+    }
+
+    private void registerApi() {
+        PathFinderAPI api = new PathFinderApiImpl(this);
+        PathFinderProvider.register(api);
+        getServer().getServicesManager().register(PathFinderAPI.class, api, this, ServicePriority.Normal);
+    }
+
+    private void unregisterApi() {
+        getServer().getServicesManager().unregisterAll(this);
+        PathFinderProvider.unregister();
     }
 
     public void reloadConfigurations() {

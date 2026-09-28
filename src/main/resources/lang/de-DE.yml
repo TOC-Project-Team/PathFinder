@@ -163,6 +163,7 @@ messages:
   nav-rename-fail: "Umbenennung fehlgeschlagen (Duplikat oder nicht gefunden)"
   nav-start-ok: "Navigation für Spieler gestartet zu: {0}"
   nav-go-started: "Navigation gestartet zu: {0}"
+  nav-start-cancelled: "Navigation konnte nicht gestartet werden."
   nav-stop-ok: "Navigation gestoppt"
   nav-stop-other-none: "Spieler {0} hat keine aktive Navigation"
   nav-stop-other-ok: "Navigation von Spieler {0} zu {1} gestoppt"

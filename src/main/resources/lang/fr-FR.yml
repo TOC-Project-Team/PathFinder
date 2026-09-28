@@ -163,6 +163,7 @@ messages:
   nav-rename-fail: "Échec du renommage (doublon ou introuvable)"
   nav-start-ok: "Navigation démarrée pour le joueur vers : {0}"
   nav-go-started: "Navigation démarrée vers : {0}"
+  nav-start-cancelled: "Impossible de démarrer la navigation."
   nav-stop-ok: "Navigation arrêtée"
   nav-stop-other-none: "Le joueur {0} n'a aucune navigation active"
   nav-stop-other-ok: "Navigation du joueur {0} vers {1} arrêtée"

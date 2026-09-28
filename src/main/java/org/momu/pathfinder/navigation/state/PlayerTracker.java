@@ -6,6 +6,11 @@ import java.util.Set;
 import java.util.UUID;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.momu.pathfinder.api.NavigationSession;
+import org.momu.pathfinder.api.NavigationType;
+import org.momu.pathfinder.api.event.PathFinderNavigationStartEvent;
+import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent;
+import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
 import org.momu.pathfinder.config.LanguageManager;
 import org.momu.pathfinder.presentation.listener.MasterListener;
@@ -21,6 +26,7 @@ public class PlayerTracker {
     private final java.util.Map<UUID, Location> beaconNavigations = new java.util.HashMap<>();
     private final java.util.Map<UUID, Location> waypointNavigations = new java.util.HashMap<>();
     private final java.util.Map<UUID, String> waypointNames = new java.util.HashMap<>();
+    private final Set<UUID> customLocationNavigations = new HashSet<>();
     private boolean navigationEnabled = true;
     private final Set<UUID> actionBarSuppressedPlayers = new HashSet<>();
 
@@ -46,6 +52,13 @@ public class PlayerTracker {
         }
         saveData(PathFinderPlugin.getInstance());
         return hidden;
+    }
+
+    public void setLocationHidden(UUID playerUUID, boolean hidden) {
+        if (playerUUID == null || isLocationHidden(playerUUID) == hidden) {
+            return;
+        }
+        toggleHideLocation(playerUUID);
     }
 
     public boolean isLocationHidden(UUID playerUUID) {
@@ -92,7 +105,15 @@ public class PlayerTracker {
             }
         }
 
-        stopNavigation(playerUUID);
+        org.bukkit.entity.Player startTarget = org.bukkit.Bukkit.getPlayer(targetUUID);
+        NavigationSession pending = new NavigationSession(playerUUID, NavigationType.PLAYER,
+                startTarget != null ? startTarget.getLocation() : null, targetUUID,
+                startTarget != null ? startTarget.getName() : null);
+        if (!callStartEvent(playerUUID, pending)) {
+            return false;
+        }
+
+        stopNavigation(playerUUID, StopReason.REPLACED);
 
         navigationTargets.put(playerUUID, targetUUID);
         navigatingPlayers.add(playerUUID);
@@ -154,6 +175,11 @@ public class PlayerTracker {
     }
 
     public void stopNavigation(UUID playerUUID) {
+        stopNavigation(playerUUID, StopReason.OTHER);
+    }
+
+    public void stopNavigation(UUID playerUUID, StopReason reason) {
+        NavigationSession endedSession = getSession(playerUUID);
         UUID targetUUID = getNavigationTarget(playerUUID);
         org.bukkit.entity.Player navPlayer = org.bukkit.Bukkit.getPlayer(playerUUID);
 
@@ -162,6 +188,7 @@ public class PlayerTracker {
         beaconNavigations.remove(playerUUID);
         waypointNavigations.remove(playerUUID);
         waypointNames.remove(playerUUID);
+        customLocationNavigations.remove(playerUUID);
         navigatingPlayers.remove(playerUUID);
         actionBarSuppressedPlayers.remove(playerUUID);
 
@@ -207,6 +234,50 @@ public class PlayerTracker {
             }
         }
         MasterListener.getGuiManager().removeParticleTask(playerUUID);
+
+        if (endedSession != null) {
+            org.bukkit.Bukkit.getPluginManager().callEvent(new PathFinderNavigationStopEvent(navPlayer, endedSession,
+                    reason == null ? StopReason.OTHER : reason));
+        }
+    }
+
+    private boolean callStartEvent(UUID playerUUID, NavigationSession session) {
+        PathFinderNavigationStartEvent event = new PathFinderNavigationStartEvent(
+                org.bukkit.Bukkit.getPlayer(playerUUID), session);
+        org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        return !event.isCancelled();
+    }
+
+    /**
+     * Builds an API snapshot of the player's current navigation, or {@code null} if they are not navigating.
+     * The lookup order matches the priority used by PathFinding.startPathfinding.
+     */
+    public NavigationSession getSession(UUID playerUUID) {
+        if (playerUUID == null) {
+            return null;
+        }
+        Location beacon = beaconNavigations.get(playerUUID);
+        if (beacon != null) {
+            return new NavigationSession(playerUUID, NavigationType.BEACON, beacon.clone(), null, null);
+        }
+        Location waypoint = waypointNavigations.get(playerUUID);
+        if (waypoint != null) {
+            NavigationType type = customLocationNavigations.contains(playerUUID)
+                    ? NavigationType.LOCATION : NavigationType.WAYPOINT;
+            return new NavigationSession(playerUUID, type, waypoint.clone(), null, waypointNames.get(playerUUID));
+        }
+        Location stronghold = strongholdNavigations.get(playerUUID);
+        if (stronghold != null) {
+            return new NavigationSession(playerUUID, NavigationType.STRONGHOLD, stronghold.clone(), null, null);
+        }
+        UUID targetUUID = navigationTargets.get(playerUUID);
+        if (targetUUID != null) {
+            org.bukkit.entity.Player target = org.bukkit.Bukkit.getPlayer(targetUUID);
+            return new NavigationSession(playerUUID, NavigationType.PLAYER,
+                    target != null ? target.getLocation() : null, targetUUID,
+                    target != null ? target.getName() : null);
+        }
+        return null;
     }
 
     public void suppressActionBarForCurrentSession(UUID playerUUID) {
@@ -230,6 +301,18 @@ public class PlayerTracker {
             return false;
         }
 
+        // Refining an active stronghold target (e.g. to the portal frame) is not a new navigation.
+        if (!strongholdNavigations.containsKey(playerUUID)) {
+            NavigationSession pending = new NavigationSession(playerUUID, NavigationType.STRONGHOLD,
+                    strongholdLocation, null, null);
+            if (!callStartEvent(playerUUID, pending)) {
+                return false;
+            }
+            if (isNavigating(playerUUID)) {
+                stopNavigation(playerUUID, StopReason.REPLACED);
+            }
+        }
+
         navigationTargets.remove(playerUUID);
         beaconNavigations.remove(playerUUID);
 
@@ -247,7 +330,13 @@ public class PlayerTracker {
             return false;
         }
 
-        stopNavigation(playerUUID);
+        NavigationSession pending = new NavigationSession(playerUUID, NavigationType.BEACON, beaconLocation, null,
+                null);
+        if (!callStartEvent(playerUUID, pending)) {
+            return false;
+        }
+
+        stopNavigation(playerUUID, StopReason.REPLACED);
 
         beaconNavigations.put(playerUUID, beaconLocation);
         navigatingPlayers.add(playerUUID);
@@ -259,14 +348,31 @@ public class PlayerTracker {
     }
 
     public boolean setWaypointNavigation(UUID playerUUID, Location location, String name) {
+        return setWaypointNavigation(playerUUID, location, name, NavigationType.WAYPOINT);
+    }
+
+    /**
+     * Starts a fixed-location navigation. {@code type} is {@link NavigationType#WAYPOINT} for saved waypoints and
+     * {@link NavigationType#LOCATION} for plugin supplied locations; both use the same runtime path.
+     */
+    public boolean setWaypointNavigation(UUID playerUUID, Location location, String name, NavigationType type) {
         if (!canPlayerUseNavigation(playerUUID)) {
             return false;
+        }
+        NavigationType sessionType = type == NavigationType.LOCATION ? NavigationType.LOCATION : NavigationType.WAYPOINT;
+        NavigationSession pending = new NavigationSession(playerUUID, sessionType, location, null, name);
+        if (!callStartEvent(playerUUID, pending)) {
+            return false;
+        }
+        if (isNavigating(playerUUID)) {
+            stopNavigation(playerUUID, StopReason.REPLACED);
         }
         navigationTargets.remove(playerUUID);
         strongholdNavigations.remove(playerUUID);
         beaconNavigations.remove(playerUUID);
         waypointNavigations.put(playerUUID, location);
         if (name != null) waypointNames.put(playerUUID, name);
+        if (sessionType == NavigationType.LOCATION) customLocationNavigations.add(playerUUID);
         navigatingPlayers.add(playerUUID);
         return true;
     }
@@ -283,6 +389,9 @@ public class PlayerTracker {
         navigationTargets.clear();
         strongholdNavigations.clear();
         beaconNavigations.clear();
+        waypointNavigations.clear();
+        waypointNames.clear();
+        customLocationNavigations.clear();
         navigatingPlayers.clear();
     }
 
@@ -299,7 +408,7 @@ public class PlayerTracker {
         Set<UUID> allNavigatingPlayers = new HashSet<>(navigatingPlayers);
 
         for (UUID playerUUID : allNavigatingPlayers) {
-            stopNavigation(playerUUID);
+            stopNavigation(playerUUID, StopReason.PLUGIN_DISABLED);
         }
 
         clearAllNavigations();
@@ -312,6 +421,12 @@ public class PlayerTracker {
         }
         saveData(PathFinderPlugin.getInstance());
         return navigationEnabled;
+    }
+
+    public void setNavigationEnabled(boolean enabled) {
+        if (navigationEnabled != enabled) {
+            toggleNavigationEnabled();
+        }
     }
 
     public boolean isNavigationEnabled() {
@@ -327,7 +442,7 @@ public class PlayerTracker {
                 continue;
 
             if (!PathFinderPlugin.getInstance().canBypassNavigationRestrictions(playerUUID)) {
-                stopNavigation(playerUUID);
+                stopNavigation(playerUUID, StopReason.NAVIGATION_DISABLED);
             }
         }
     }

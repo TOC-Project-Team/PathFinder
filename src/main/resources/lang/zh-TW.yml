@@ -163,6 +163,7 @@ messages:
   nav-rename-fail: "更名失敗（重複名稱或不存在）"
   nav-start-ok: "已為玩家開始導航至：{0}"
   nav-go-started: "已開始導航至：{0}"
+  nav-start-cancelled: "無法開始導航。"
   nav-stop-ok: "已停止導航"
   nav-stop-other-none: "玩家 {0} 目前沒有進行導航"
   nav-stop-other-ok: "已停止玩家 {0} 的導航，目的地為 {1}"
