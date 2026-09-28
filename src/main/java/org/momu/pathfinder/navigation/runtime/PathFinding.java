@@ -34,6 +34,11 @@ public class PathFinding {
         runTaskIfEnabled(plugin, new BukkitRunnable() {
             @SuppressWarnings("deprecation")
             public void run() {
+                // Every caller sets a target before scheduling this run. If the navigation was stopped (or the
+                // player left) before it executes, bail out instead of falling through to the stronghold search.
+                if (!player.isOnline() || !PlayerTracker.getInstance().isNavigating(player.getUniqueId())) {
+                    return;
+                }
                 boolean isStronghold;
                 Location finalTargetLoc;
                 PlayerTracker tracker;
