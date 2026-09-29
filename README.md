@@ -366,4 +366,10 @@ Language files live under `plugins/PathFinder/lang/` at runtime and can be exten
 
 Discord community: [https://discord.gg/daSchNY7Sr](https://discord.gg/daSchNY7Sr)
 
+---
+
+## License
+
+PathFinder is released under the [MIT License](LICENSE).
+
 Enjoy using PathFinder.
