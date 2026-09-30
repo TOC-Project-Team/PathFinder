@@ -133,8 +133,11 @@ Configuration changes are intended to be lightweight to maintain, and lower valu
 
 ### Notes
 
-- This plugin is better suited to general navigation than high-precision parkour routing.
-- Vertical path support is primarily designed around ladders and scaffolding.
+- Routes are planned from each block's real collision shape, so carpets, slabs, stairs, snow layers and similar low blocks are walked over, pressure plates, signs and banners are walked through, and fences and walls (1.5 blocks tall) are not jumped over. Blocks added in newer Minecraft versions work the same way without plugin changes.
+- Ladders, vines (including weeping, twisting and cave vines) and scaffolding are climbed. From the top of a ladder or vine, or standing on top of scaffolding, the route can continue onto a block up to one block higher.
+- Simple parkour is supported: jumps between blocks at the same or different heights (up to one block higher), in any direction, when the arc is clear. `max_block_jump_distance` limits how far a jump reaches; gaps are further limited to what a sprint jump can clear (3 blocks on flat ground, 2 when landing one block higher). Jumps across lava or fire are never suggested.
+- Wooden and copper doors, trapdoors and fence gates are treated as openable; closed iron doors and trapdoors are not.
+- Breaking blocks is only suggested when walking, jumping and climbing cannot reach the target.
 - Underwater pathfinding can require additional testing depending on your map design.
 
 ---

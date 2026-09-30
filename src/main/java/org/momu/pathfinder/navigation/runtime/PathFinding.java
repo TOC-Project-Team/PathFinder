@@ -487,30 +487,20 @@ public class PathFinding {
                                         Pathfinder.Node currentNode = (Pathfinder.Node) finalPath.get(i);
                                         Pathfinder.Node nextNode = (Pathfinder.Node) finalPath.get(i + 1);
 
-                                        if (currentNode.moveType == 5) { // MOVE_BLOCK_JUMP
-                                            int jumpEndIndex = i + 1;
-                                            while (jumpEndIndex < maxDrawNodes - 1 &&
-                                                    ((Pathfinder.Node) finalPath.get(jumpEndIndex)).moveType == 5) {
-                                                jumpEndIndex++;
-                                            }
-
-                                            Pathfinder.Node jumpStartNode = currentNode;
-                                            Pathfinder.Node jumpEndNode = (Pathfinder.Node) finalPath.get(jumpEndIndex);
-
+                                        if (nextNode.moveType == Pathfinder.MOVE_BLOCK_JUMP) {
+                                            // Each gap jump is its own arc from take-off to landing.
                                             Location jumpStart = new Location(
-                                                    jumpStartNode.location.getWorld(),
-                                                    jumpStartNode.location.getBlockX() + 0.5,
-                                                    jumpStartNode.location.getBlockY() + 0.5,
-                                                    jumpStartNode.location.getBlockZ() + 0.5);
+                                                    currentNode.location.getWorld(),
+                                                    currentNode.location.getBlockX() + 0.5,
+                                                    currentNode.location.getBlockY() + 0.5,
+                                                    currentNode.location.getBlockZ() + 0.5);
                                             Location jumpEnd = new Location(
-                                                    jumpEndNode.location.getWorld(),
-                                                    jumpEndNode.location.getBlockX() + 0.5,
-                                                    jumpEndNode.location.getBlockY() + 0.5,
-                                                    jumpEndNode.location.getBlockZ() + 0.5);
+                                                    nextNode.location.getWorld(),
+                                                    nextNode.location.getBlockX() + 0.5,
+                                                    nextNode.location.getBlockY() + 0.5,
+                                                    nextNode.location.getBlockZ() + 0.5);
 
                                             generateJumpParabola(player, jumpStart, jumpEnd);
-
-                                            i = jumpEndIndex - 1;
                                             continue;
                                         }
                                         Location start = new Location(
@@ -549,12 +539,12 @@ public class PathFinding {
                                         boolean breakTransition = currentNode.toBreak || nextNode.toBreak;
                                         if (!breakTransition) {
                                             Block block = currentNode.location.getBlock();
-                                            if (Pathfinder.isLadder(block)) {
+                                            if (!Pathfinder.isScaffolding(block) && Pathfinder.isClimbable(block)) {
                                                 Location blockLoc = currentNode.location.clone();
                                                 ParticleGen.drawBlockOutline(player, blockLoc, Color.GREEN,
                                                         0.2);
                                                 Block blockAbove = block.getRelative(0, 1, 0);
-                                                if (Pathfinder.isLadder(blockAbove)) {
+                                                if (!Pathfinder.isScaffolding(blockAbove) && Pathfinder.isClimbable(blockAbove)) {
                                                     ParticleGen.drawBlockOutline(player,
                                                             blockLoc.clone().add(0.0, 1.0, 0.0), Color.GREEN, 0.2);
                                                 }
@@ -1199,16 +1189,10 @@ public class PathFinding {
         Block feet = loc.getBlock();
         Block head = feet.getRelative(0, 1, 0);
         Block ground = feet.getRelative(0, -1, 0);
-        boolean feetPassable = feet.isPassable() || feet.getType().name().contains((CharSequence) "DOOR")
-                || feet.getType().name().contains((CharSequence) "TRAPDOOR")
-                || feet.getType().name().contains((CharSequence) "LADDER")
-                || feet.getType().name().contains((CharSequence) "SCAFFOLDING");
-        boolean headPassable = head.isPassable() || head.getType().name().contains((CharSequence) "DOOR")
-                || head.getType().name().contains((CharSequence) "TRAPDOOR")
-                || head.getType().name().contains((CharSequence) "LADDER")
-                || head.getType().name().contains((CharSequence) "SCAFFOLDING");
-        boolean groundSolid = ground.getType().isSolid() || ground.getType().name().contains((CharSequence) "LADDER")
-                || ground.getType().name().contains((CharSequence) "SCAFFOLDING");
+        boolean feetPassable = Pathfinder.isCompletelyPassable(feet) || Pathfinder.isClimbable(feet);
+        boolean headPassable = Pathfinder.isCompletelyPassable(head) || Pathfinder.isClimbable(head);
+        // isSolid() reports pressure plates and signs as solid, so check for an actual collision box.
+        boolean groundSolid = !ground.isPassable() || Pathfinder.isScaffolding(ground);
         boolean isDangerous = feet.getType().name().contains((CharSequence) "LAVA")
                 || feet.getType().name().contains((CharSequence) "FIRE")
                 || head.getType().name().contains((CharSequence) "LAVA")
