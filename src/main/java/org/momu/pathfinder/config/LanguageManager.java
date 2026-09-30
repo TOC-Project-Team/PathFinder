@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
  */
 public class LanguageManager {
     private static final Pattern MESSAGE_FORMAT_PLACEHOLDER = Pattern.compile(".*\\{\\d+}.*");
+    private static final Pattern LONE_APOSTROPHE = Pattern.compile("(?<!')'(?!')");
     private static final String PLAYER_LANGUAGES_FILE = "player-languages.yml";
 
     private static LanguageManager instance;
@@ -324,9 +325,23 @@ public class LanguageManager {
     }
 
     private String format(String pattern, String key, Object... args) {
+        String formatted = formatPattern(pattern, args);
+        if (formatted == null) {
+            plugin.getLogger().warning("Error formatting message for key: " + key);
+            return pattern;
+        }
+        return formatted;
+    }
+
+    /**
+     * Fills in a message's arguments.
+     *
+     * @return the formatted message, or {@code null} if the pattern does not fit the arguments
+     */
+    static String formatPattern(String pattern, Object... args) {
         if (MESSAGE_FORMAT_PLACEHOLDER.matcher(pattern).matches()) {
             try {
-                return MessageFormat.format(pattern, args);
+                return MessageFormat.format(escapeApostrophes(pattern), args);
             } catch (Exception ignored) {
                 // Try printf-style below.
             }
@@ -334,9 +349,17 @@ public class LanguageManager {
         try {
             return String.format(pattern, args);
         } catch (Exception ignored) {
-            plugin.getLogger().warning("Error formatting message for key: " + key);
-            return pattern;
+            return null;
         }
+    }
+
+    /**
+     * {@link MessageFormat} treats a single apostrophe as the start of quoted text, which would hide every
+     * placeholder after "player {0}'s" or "l'End". Translations are plain text, so lone apostrophes are doubled
+     * to keep them literal; an already doubled {@code ''} is left alone.
+     */
+    private static String escapeApostrophes(String pattern) {
+        return LONE_APOSTROPHE.matcher(pattern).replaceAll("''");
     }
 
     // ---------------------------------------------------------------------------------------------------------
