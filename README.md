@@ -214,8 +214,7 @@ This is a faster build path that skips the full clean step and runs `shadowJar` 
 │   │   ├── display/          particle path renderer and action bar
 │   │   └── locate/           beacon and stronghold search
 │   └── waypoint/             saved waypoints and waypoints.yml storage
-├── src/main/resources/       plugin.yml, config files, lang/*.yml
-└── src/test/                 tests
+└── src/main/resources/       plugin.yml, config files, lang/*.yml
 ```
 
 How a navigation runs:
@@ -226,21 +225,6 @@ How a navigation runs:
    `AStarPathfinder` asynchronously, then draws the path with `PathRenderer` and updates the action bar.
 4. Arriving, stopping or losing the target ends the navigation through `NavigationTracker.stopNavigation`,
    which cancels the task and fires `PathFinderNavigationStopEvent`.
-
-### Tests
-
-```bash
-./gradlew test
-```
-
-The tests run without a Minecraft server. `NavigationGoldenTest` runs the pathfinder and renderer on
-fixed terrains and compares the paths, landing spots and particles against files in
-`src/test/resources/golden/`. If you change pathfinding or rendering on purpose, review the difference
-and update the files with:
-
-```bash
-./gradlew test -Dgolden.update=true
-```
 
 ---
 
