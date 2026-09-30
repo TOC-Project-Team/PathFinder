@@ -26,6 +26,17 @@ dependencies {
     compileOnly('io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT')
     implementation('com.google.code.gson:gson:2.11.0')
     implementation('org.bstats:bstats-bukkit:3.2.1')
+
+    testImplementation('io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT')
+    testImplementation(platform('org.junit:junit-bom:5.11.4'))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    testRuntimeOnly('org.junit.platform:junit-platform-launcher')
+    testImplementation('org.mockito:mockito-core:5.14.2')
+}
+
+test {
+    useJUnitPlatform()
+    maxHeapSize = '1g'
 }
 
 java {
