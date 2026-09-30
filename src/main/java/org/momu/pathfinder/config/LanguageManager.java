@@ -1,35 +1,46 @@
 package org.momu.pathfinder.config;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
+/**
+ * Translated messages. The server default language comes from {@code config.yml}; players can pick their own
+ * with {@code /toc lang}, which is remembered in {@code player-languages.yml}.
+ *
+ * <p>Messages are looked up by key ({@code messages.xyz}); a missing key is returned as-is. Arguments are
+ * formatted with {@link MessageFormat} when the text contains {@code {0}}-style placeholders, otherwise with
+ * {@link String#format}. Prefer {@link Messages#get} over calling this class directly.
+ */
 public class LanguageManager {
+    private static final Pattern MESSAGE_FORMAT_PLACEHOLDER = Pattern.compile(".*\\{\\d+}.*");
+    private static final Pattern LONE_APOSTROPHE = Pattern.compile("(?<!')'(?!')");
+    private static final String PLAYER_LANGUAGES_FILE = "player-languages.yml";
+
     private static LanguageManager instance;
+
     private final JavaPlugin plugin;
-    private FileConfiguration langConfig;
-    private String currentLang = "en-US";
-    private boolean isLanguageSwitch = false;
-    
+    /** Messages in the server default language. */
+    private FileConfiguration defaultMessages;
+    private String defaultLanguage = LanguageFiles.FALLBACK;
     private final Map<UUID, String> playerLanguages = new HashMap<>();
-    private final Map<String, FileConfiguration> languageConfigs = new HashMap<>();
-    private FileConfiguration playerLangConfig;
+    /** Loaded message files for languages players have chosen. */
+    private final Map<String, FileConfiguration> loadedLanguages = new HashMap<>();
+    private FileConfiguration playerLanguagesFile;
 
     private LanguageManager(JavaPlugin plugin) {
         this.plugin = plugin;
-        copyAllLanguageFiles();
+        LanguageFiles.copyBundled(plugin);
         loadLanguage();
         loadPlayerLanguages();
     }
@@ -48,524 +59,372 @@ public class LanguageManager {
         return instance;
     }
 
-    public void loadLanguage() {
-        FileConfiguration config = plugin.getConfig();
-        String newLang = config.getString("language", "en-US");
+    // ---------------------------------------------------------------------------------------------------------
+    // Server default language
+    // ---------------------------------------------------------------------------------------------------------
 
-        if (newLang.equals(currentLang) && langConfig != null) {
+    /** Loads the default language named in config.yml, if it changed since the last load. */
+    public void loadLanguage() {
+        String configured = plugin.getConfig().getString("language", LanguageFiles.FALLBACK);
+        if (configured.equals(defaultLanguage) && defaultMessages != null) {
             return;
         }
+        boolean languageChanged = !configured.equals(defaultLanguage);
+        defaultLanguage = configured;
 
-        isLanguageSwitch = !newLang.equals(currentLang);
-        currentLang = newLang;
-
-        File langDir = new File(plugin.getDataFolder(), "lang");
-        if (!langDir.exists()) {
-            langDir.mkdirs();
-        }
-
-        File langFile = new File(langDir, currentLang + ".yml");
-
-        if (!langFile.exists()) {
-            try {
-                plugin.saveResource("lang/" + currentLang + ".yml", false);
-                plugin.getLogger().info("已创建默认语言文件: " + currentLang + ".yml");
-            } catch (Exception e) {
-                plugin.getLogger().warning("无法创建默认语言文件: " + e.getMessage());
-                if (!currentLang.equals("en-US")) {
-                    try {
-                        plugin.saveResource("lang/en-US.yml", false);
-                        plugin.getLogger().info("已创建备选语言文件: en-US.yml");
-                        currentLang = "en-US";
-                        langFile = new File(langDir, "en-US.yml");
-                    } catch (Exception ex) {
-                        plugin.getLogger().warning("无法创建备选语言文件: " + ex.getMessage());
-                        langConfig = new YamlConfiguration();
-                        plugin.getLogger().warning("使用空语言配置");
-                        return;
-                    }
-                } else {
-                    langConfig = new YamlConfiguration();
-                    plugin.getLogger().warning("使用空语言配置");
-                    return;
-                }
+        File file = LanguageFiles.file(plugin, defaultLanguage);
+        if (!file.exists()) {
+            file = createDefaultLanguageFile();
+            if (file == null) {
+                defaultMessages = new YamlConfiguration();
+                plugin.getLogger().warning("Using an empty language configuration");
+                return;
             }
         }
-
-        langConfig = YamlConfiguration.loadConfiguration(langFile);
-
-        validateAndUpdateLanguageFile(langFile);
-
-        plugin.getLogger().info("Language file loaded: " + currentLang);
+        defaultMessages = YamlConfiguration.loadConfiguration(file);
+        updateDefaultLanguageFile(file, languageChanged);
+        plugin.getLogger().info("Language file loaded: " + defaultLanguage);
     }
 
-    public void reloadLanguage() {
-        langConfig = null;
-        languageConfigs.clear();
-        
-        int syncedFiles = syncAllLanguageFiles();
-        if (syncedFiles > 0) {
-            plugin.getLogger().info("Language files updated during reload: " + syncedFiles + " files synchronized");
+    /** Extracts the configured language from the jar, falling back to English. */
+    private File createDefaultLanguageFile() {
+        try {
+            plugin.saveResource(LanguageFiles.resourcePath(defaultLanguage), false);
+            plugin.getLogger().info("Created default language file: " + defaultLanguage + ".yml");
+            return LanguageFiles.file(plugin, defaultLanguage);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Could not create language file " + defaultLanguage + ".yml: " + e.getMessage());
         }
-        
+        if (defaultLanguage.equals(LanguageFiles.FALLBACK)) {
+            return null;
+        }
+        try {
+            plugin.saveResource(LanguageFiles.resourcePath(LanguageFiles.FALLBACK), false);
+            plugin.getLogger().info("Created fallback language file: " + LanguageFiles.FALLBACK + ".yml");
+            defaultLanguage = LanguageFiles.FALLBACK;
+            return LanguageFiles.file(plugin, LanguageFiles.FALLBACK);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Could not create fallback language file: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Adds missing keys from the bundled file. When the server switched to this language, all bundled values
+     * are applied so the file matches the shipped translation.
+     */
+    private void updateDefaultLanguageFile(File file, boolean languageChanged) {
+        try {
+            FileConfiguration bundled = LanguageFiles.loadBundled(plugin, defaultLanguage);
+            if (bundled == null) {
+                bundled = LanguageFiles.loadBundled(plugin, LanguageFiles.FALLBACK);
+            }
+            if (bundled == null) {
+                plugin.getLogger().warning("No bundled language file to compare against");
+                return;
+            }
+            boolean changed = LanguageFiles.migrateLegacyKeys(defaultMessages);
+            changed |= LanguageFiles.merge(bundled, defaultMessages, "", languageChanged);
+            if (languageChanged) {
+                plugin.getLogger().info("Language switched, synchronizing all translation keys");
+            }
+            if (changed) {
+                defaultMessages.save(file);
+                plugin.getLogger().info("Language file updated with missing keys");
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error while checking the language file: " + e.getMessage());
+        }
+    }
+
+    /** Re-reads all language files, first adding keys that newer versions of PathFinder introduced. */
+    public void reloadLanguage() {
+        defaultMessages = null;
+        loadedLanguages.clear();
+        int synced = syncAllLanguageFiles();
+        if (synced > 0) {
+            plugin.getLogger().info("Language files updated during reload: " + synced + " files synchronized");
+        }
         loadLanguage();
     }
 
     public String getCurrentLanguage() {
-        return currentLang;
+        return defaultLanguage;
     }
 
-    private void copyAllLanguageFiles() {
-        File langDir = new File(plugin.getDataFolder(), "lang");
-        if (!langDir.exists()) {
-            langDir.mkdirs();
-        }
-
-        String[] languageFiles = { "zh-CN.yml", "zh-TW.yml", "en-US.yml", "ru-RU.yml", "pt-PT.yml", "fr-FR.yml",
-                "es-ES.yml", "de-DE.yml" };
-
-        for (String fileName : languageFiles) {
-            File langFile = new File(langDir, fileName);
-            if (!langFile.exists()) {
-                try {
-                    plugin.saveResource("lang/" + fileName, false);
-                } catch (Exception e) {
-                    plugin.getLogger().warning("无法创建语言文件 " + fileName + ": " + e.getMessage());
-                }
-            }
-        }
-    }
+    // ---------------------------------------------------------------------------------------------------------
+    // Player languages
+    // ---------------------------------------------------------------------------------------------------------
 
     private void loadPlayerLanguages() {
-        File playerLangFile = new File(plugin.getDataFolder(), "player-languages.yml");
-        if (!playerLangFile.exists()) {
+        File file = new File(plugin.getDataFolder(), PLAYER_LANGUAGES_FILE);
+        if (!file.exists()) {
             try {
-                playerLangFile.createNewFile();
+                file.createNewFile();
             } catch (IOException e) {
-                plugin.getLogger().warning("Failed to create player-languages.yml: " + e.getMessage());
+                plugin.getLogger().warning("Failed to create " + PLAYER_LANGUAGES_FILE + ": " + e.getMessage());
                 return;
             }
         }
-        
-        playerLangConfig = YamlConfiguration.loadConfiguration(playerLangFile);
-        
-        if (playerLangConfig.getConfigurationSection("players") != null) {
-            for (String uuidStr : playerLangConfig.getConfigurationSection("players").getKeys(false)) {
-                try {
-                    UUID uuid = UUID.fromString(uuidStr);
-                    String lang = playerLangConfig.getString("players." + uuidStr);
-                    if (lang != null) {
-                        playerLanguages.put(uuid, lang);
-                        loadLanguageConfig(lang);
-                    }
-                } catch (IllegalArgumentException ignored) {
+        playerLanguagesFile = YamlConfiguration.loadConfiguration(file);
+        ConfigurationSection players = playerLanguagesFile.getConfigurationSection("players");
+        if (players == null) {
+            return;
+        }
+        for (String uuid : players.getKeys(false)) {
+            try {
+                String language = players.getString(uuid);
+                if (language != null) {
+                    playerLanguages.put(UUID.fromString(uuid), language);
+                    loadLanguageFile(language);
                 }
+            } catch (IllegalArgumentException ignored) {
+                // Skip malformed entries.
             }
         }
     }
-    
+
     private void savePlayerLanguages() {
-        if (playerLangConfig == null) return;
-        
-        playerLangConfig.set("players", null);
-        
-        for (Map.Entry<UUID, String> entry : playerLanguages.entrySet()) {
-            playerLangConfig.set("players." + entry.getKey().toString(), entry.getValue());
-        }
-        
-        try {
-            File playerLangFile = new File(plugin.getDataFolder(), "player-languages.yml");
-            playerLangConfig.save(playerLangFile);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to save player-languages.yml: " + e.getMessage());
-        }
-    }
-    
-    private void loadLanguageConfig(String language) {
-        if (languageConfigs.containsKey(language)) {
+        if (playerLanguagesFile == null) {
             return;
         }
-        
-        File langFile = new File(plugin.getDataFolder(), "lang/" + language + ".yml");
-        
-        if (!langFile.exists()) {
+        playerLanguagesFile.set("players", null);
+        for (Map.Entry<UUID, String> entry : playerLanguages.entrySet()) {
+            playerLanguagesFile.set("players." + entry.getKey(), entry.getValue());
+        }
+        try {
+            playerLanguagesFile.save(new File(plugin.getDataFolder(), PLAYER_LANGUAGES_FILE));
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to save " + PLAYER_LANGUAGES_FILE + ": " + e.getMessage());
+        }
+    }
+
+    private void loadLanguageFile(String language) {
+        if (loadedLanguages.containsKey(language)) {
+            return;
+        }
+        File file = LanguageFiles.file(plugin, language);
+        if (!file.exists()) {
             try {
-                plugin.saveResource("lang/" + language + ".yml", false);
+                plugin.saveResource(LanguageFiles.resourcePath(language), false);
             } catch (Exception e) {
                 plugin.getLogger().warning("Failed to copy language file: " + language + ".yml");
                 return;
             }
         }
-        
         try {
-            FileConfiguration config = YamlConfiguration.loadConfiguration(langFile);
-            languageConfigs.put(language, config);
+            loadedLanguages.put(language, YamlConfiguration.loadConfiguration(file));
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to load language config: " + language);
         }
     }
-    
+
+    /** @return {@code false} if there is no such language file */
     public boolean setPlayerLanguage(UUID playerId, String language) {
-        File langFile = new File(plugin.getDataFolder(), "lang/" + language + ".yml");
-        if (!langFile.exists()) {
+        if (!LanguageFiles.file(plugin, language).exists()) {
             return false;
         }
-        
         try {
-            boolean updated = syncLanguageFile(language);
-            if (updated) {
-                languageConfigs.remove(language);
+            if (syncLanguageFile(language)) {
+                loadedLanguages.remove(language);
             }
-        } catch (Exception ignore) {}
-        
-        loadLanguageConfig(language);
-        
-        if (!languageConfigs.containsKey(language)) {
+        } catch (Exception ignored) {
+            // Use the file as it is.
+        }
+        loadLanguageFile(language);
+        if (!loadedLanguages.containsKey(language)) {
             return false;
         }
-        
         playerLanguages.put(playerId, language);
-        
         savePlayerLanguages();
-        
         return true;
     }
-    
+
+    /** The language the player picked, or {@code null} if they use the server default. */
     public String getPlayerLanguage(UUID playerId) {
         return playerLanguages.get(playerId);
     }
-    
+
     public void removePlayerLanguage(UUID playerId) {
         playerLanguages.remove(playerId);
         savePlayerLanguages();
     }
-    
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Lookup
+    // ---------------------------------------------------------------------------------------------------------
+
+    /** A message in the server default language. */
     public String getString(String key) {
-        String value = langConfig.getString(key);
+        String value = defaultMessages.getString(key);
         return value != null ? value : key;
     }
-    
+
+    /** A message in the player's language, falling back to the server default. */
     public String getString(UUID playerId, String key) {
-        if (playerId == null) {
+        String language = playerId == null ? null : playerLanguages.get(playerId);
+        if (language == null) {
             return getString(key);
         }
-        
-        String playerLang = playerLanguages.get(playerId);
-        if (playerLang == null) {
-            return getString(key);
-        }
-        
-        FileConfiguration config = languageConfigs.get(playerLang);
-        if (config == null) {
-            loadLanguageConfig(playerLang);
-            config = languageConfigs.get(playerLang);
-            if (config == null) {
+        FileConfiguration messages = loadedLanguages.get(language);
+        if (messages == null) {
+            loadLanguageFile(language);
+            messages = loadedLanguages.get(language);
+            if (messages == null) {
                 return getString(key);
             }
         }
-        
-        String value = config.getString(key);
+        String value = messages.getString(key);
         if (value == null) {
-            try {
-                boolean updated = syncLanguageFile(playerLang);
-                if (updated) {
-                    languageConfigs.remove(playerLang);
-                    loadLanguageConfig(playerLang);
-                    FileConfiguration reloaded = languageConfigs.get(playerLang);
-                    if (reloaded != null) {
-                        value = reloaded.getString(key);
-                    }
-                }
-            } catch (Exception ignore) {}
+            value = lookupAfterSync(language, key);
         }
-        if (value == null) {
-            return getString(key);
-        }
-        
-        return value;
+        return value != null ? value : getString(key);
     }
-    
+
+    /** The key may be new in this version: add missing keys to the player's language file and try again. */
+    private String lookupAfterSync(String language, String key) {
+        try {
+            if (syncLanguageFile(language)) {
+                loadedLanguages.remove(language);
+                loadLanguageFile(language);
+                FileConfiguration reloaded = loadedLanguages.get(language);
+                return reloaded == null ? null : reloaded.getString(key);
+            }
+        } catch (Exception ignored) {
+            // Fall back to the default language.
+        }
+        return null;
+    }
+
     public String getString(Player player, String key) {
         return player != null ? getString(player.getUniqueId(), key) : getString(key);
     }
-    
-    public String getStringByLanguage(String language, String key, Object... args) {
-        if (!languageConfigs.containsKey(language)) {
-            loadLanguageConfig(language);
-        }
-        
-        FileConfiguration config = languageConfigs.get(language);
-        if (config == null) {
-            plugin.getLogger().warning("无法加载语言配置 " + language + "，使用默认语言");
-            String pattern = getString(key);
-            return formatMessage(pattern, key, args);
-        }
-        
-        String pattern = config.getString(key);
-        if (pattern == null) {
-            pattern = getString(key);
-        }
-        
-        return formatMessage(pattern, key, args);
-    }
-    
-    public String[] getAvailableLanguages() {
-        File langDir = new File(plugin.getDataFolder(), "lang");
-        if (!langDir.exists() || !langDir.isDirectory()) {
-            return new String[0];
-        }
-        
-        File[] files = langDir.listFiles((dir, name) -> name.endsWith(".yml"));
-        if (files == null) {
-            return new String[0];
-        }
-        
-        String[] languages = new String[files.length];
-        for (int i = 0; i < files.length; i++) {
-            String fileName = files[i].getName();
-            languages[i] = fileName.substring(0, fileName.length() - 4);
-        }
-        
-        return languages;
-    }
-    
-    public boolean isLanguageAvailable(String language) {
-        File langFile = new File(plugin.getDataFolder(), "lang/" + language + ".yml");
-        return langFile.exists();
-    }
-    
-    public void shutdown() {
-        savePlayerLanguages();
-    }
-    
-
-    
-    public boolean syncLanguageFile(String language) {
-        try {
-            File langDir = new File(plugin.getDataFolder(), "lang");
-            if (!langDir.exists()) {
-                langDir.mkdirs();
-            }
-            
-            File configLangFile = new File(langDir, language + ".yml");
-            
-            InputStream jarLangStream = plugin.getResource("lang/" + language + ".yml");
-            if (jarLangStream == null) {
-                return false;
-            }
-            
-            FileConfiguration jarConfig = YamlConfiguration.loadConfiguration(
-                new InputStreamReader(jarLangStream, StandardCharsets.UTF_8));
-            
-            FileConfiguration configFileConfig;
-            
-            if (!configLangFile.exists()) {
-                plugin.saveResource("lang/" + language + ".yml", false);
-                return true;
-            } else {
-                configFileConfig = YamlConfiguration.loadConfiguration(configLangFile);
-            }
-            
-            boolean hasChanges = migrateLegacyLanguageKeys(configFileConfig);
-            if (syncConfigSections(jarConfig, configFileConfig, "")) {
-                hasChanges = true;
-            }
-            
-            if (hasChanges) {
-                configFileConfig.save(configLangFile);
-                
-                languageConfigs.remove(language);
-                loadLanguageConfig(language);
-                
-                return true;
-            }
-            
-            return false;
-            
-        } catch (Exception e) {
-            plugin.getLogger().warning("Failed to sync language file: " + language);
-            return false;
-        }
-    }
-    
-    private boolean syncConfigSections(FileConfiguration jarConfig, FileConfiguration configFile, String path) {
-        boolean hasChanges = false;
-        
-        Set<String> keys;
-        if (path.isEmpty()) {
-            keys = jarConfig.getKeys(false);
-        } else {
-            if (!jarConfig.isConfigurationSection(path)) {
-                return false;
-            }
-            keys = jarConfig.getConfigurationSection(path).getKeys(false);
-        }
-        
-        for (String key : keys) {
-            String currentPath = path.isEmpty() ? key : path + "." + key;
-            
-            if (jarConfig.isConfigurationSection(currentPath)) {
-                if (!configFile.isConfigurationSection(currentPath)) {
-                    configFile.createSection(currentPath);
-                    hasChanges = true;
-                }
-                
-                if (syncConfigSections(jarConfig, configFile, currentPath)) {
-                    hasChanges = true;
-                }
-            } else {
-                if (!configFile.contains(currentPath)) {
-                    Object value = jarConfig.get(currentPath);
-                    configFile.set(currentPath, value);
-                    hasChanges = true;
-                }
-            }
-        }
-        
-        return hasChanges;
-    }
-    
-    public int syncAllLanguageFiles() {
-        String[] availableLanguages = {"zh-CN", "zh-TW", "en-US", "ru-RU", "pt-PT", "fr-FR", "es-ES", "de-DE"};
-        int updatedCount = 0;
-        
-        for (String language : availableLanguages) {
-            InputStream jarStream = plugin.getResource("lang/" + language + ".yml");
-            if (jarStream != null) {
-                try {
-                    jarStream.close();
-                    boolean updated = syncLanguageFile(language);
-                    if (updated) {
-                        updatedCount++;
-                    }
-                } catch (IOException ignored) {
-                }
-            }
-        }
-        
-        return updatedCount;
-    }
-    
 
     public String getString(String key, Object... args) {
-        String pattern = getString(key);
-        return formatMessage(pattern, key, args);
+        return format(getString(key), key, args);
     }
-    
+
     public String getString(UUID playerId, String key, Object... args) {
-        String pattern = getString(playerId, key);
-        return formatMessage(pattern, key, args);
+        return format(getString(playerId, key), key, args);
     }
-    
+
     public String getString(Player player, String key, Object... args) {
-        String pattern = getString(player, key);
-        return formatMessage(pattern, key, args);
+        return format(getString(player, key), key, args);
     }
-    
-    private String formatMessage(String pattern, String key, Object... args) {
-        if (pattern.matches(".*\\{\\d+}.*")) {
+
+    /** A message in a specific language, falling back to the server default. */
+    public String getStringByLanguage(String language, String key, Object... args) {
+        loadLanguageFile(language);
+        FileConfiguration messages = loadedLanguages.get(language);
+        if (messages == null) {
+            plugin.getLogger().warning("Could not load language " + language + ", using the default language");
+            return format(getString(key), key, args);
+        }
+        String pattern = messages.getString(key);
+        return format(pattern != null ? pattern : getString(key), key, args);
+    }
+
+    private String format(String pattern, String key, Object... args) {
+        String formatted = formatPattern(pattern, args);
+        if (formatted == null) {
+            plugin.getLogger().warning("Error formatting message for key: " + key);
+            return pattern;
+        }
+        return formatted;
+    }
+
+    /**
+     * Fills in a message's arguments.
+     *
+     * @return the formatted message, or {@code null} if the pattern does not fit the arguments
+     */
+    static String formatPattern(String pattern, Object... args) {
+        if (MESSAGE_FORMAT_PLACEHOLDER.matcher(pattern).matches()) {
             try {
-                return MessageFormat.format(pattern, args);
+                return MessageFormat.format(escapeApostrophes(pattern), args);
             } catch (Exception ignored) {
+                // Try printf-style below.
             }
         }
         try {
             return String.format(pattern, args);
         } catch (Exception ignored) {
-            plugin.getLogger().warning("Error formatting message for key: " + key);
-            return pattern;
+            return null;
         }
     }
 
-    private void validateAndUpdateLanguageFile(File langFile) {
+    /**
+     * {@link MessageFormat} treats a single apostrophe as the start of quoted text, which would hide every
+     * placeholder after "player {0}'s" or "l'End". Translations are plain text, so lone apostrophes are doubled
+     * to keep them literal; an already doubled {@code ''} is left alone.
+     */
+    private static String escapeApostrophes(String pattern) {
+        return LONE_APOSTROPHE.matcher(pattern).replaceAll("''");
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Available languages and file sync
+    // ---------------------------------------------------------------------------------------------------------
+
+    /** Every {@code lang/*.yml} in the data folder, including custom ones. */
+    public String[] getAvailableLanguages() {
+        File directory = new File(plugin.getDataFolder(), "lang");
+        File[] files = directory.isDirectory() ? directory.listFiles((dir, name) -> name.endsWith(".yml")) : null;
+        if (files == null) {
+            return new String[0];
+        }
+        String[] languages = new String[files.length];
+        for (int i = 0; i < files.length; i++) {
+            String name = files[i].getName();
+            languages[i] = name.substring(0, name.length() - 4);
+        }
+        return languages;
+    }
+
+    public boolean isLanguageAvailable(String language) {
+        return new File(plugin.getDataFolder(), "lang/" + language + ".yml").exists();
+    }
+
+    /**
+     * Adds keys from the bundled version of a language to the server's copy.
+     *
+     * @return whether the file was created or changed
+     */
+    public boolean syncLanguageFile(String language) {
         try {
-            InputStream defaultLangStream = plugin.getResource("lang/" + currentLang + ".yml");
-            if (defaultLangStream == null) {
-                defaultLangStream = plugin.getResource("lang/en-US.yml");
-                if (defaultLangStream == null) {
-                    plugin.getLogger().warning("无法找到默认语言文件进行校对");
-                    return;
-                }
+            FileConfiguration bundled = LanguageFiles.loadBundled(plugin, language);
+            if (bundled == null) {
+                return false;
             }
-
-            FileConfiguration defaultConfig = YamlConfiguration.loadConfiguration(
-                    new InputStreamReader(defaultLangStream, StandardCharsets.UTF_8));
-
-            boolean hasChanges = migrateLegacyLanguageKeys(langConfig);
-
-            if (isLanguageSwitch) {
-                hasChanges |= validateAndUpdateSection(defaultConfig, langConfig, "", true);
-                plugin.getLogger().info("检测到语言切换，正在同步所有翻译键值");
-            } else {
-                hasChanges |= validateAndUpdateSection(defaultConfig, langConfig, "", false);
+            File file = LanguageFiles.file(plugin, language);
+            if (!file.exists()) {
+                plugin.saveResource(LanguageFiles.resourcePath(language), false);
+                return true;
             }
-
-            if (hasChanges) {
-                langConfig.save(langFile);
-                if (isLanguageSwitch) {
-                    plugin.getLogger().info("语言文件已更新，所有键值已同步到新语言");
-                } else {
-                    plugin.getLogger().info("语言文件已更新，补充了缺失的键值");
-                }
+            FileConfiguration current = YamlConfiguration.loadConfiguration(file);
+            boolean changed = LanguageFiles.migrateLegacyKeys(current);
+            changed |= LanguageFiles.merge(bundled, current, "", false);
+            if (!changed) {
+                return false;
             }
-
-            isLanguageSwitch = false;
-        } catch (Exception e) {
-            plugin.getLogger().warning("校对语言文件时出错: " + e.getMessage());
-        }
-    }
-
-    private boolean validateAndUpdateSection(FileConfiguration defaultConfig, FileConfiguration currentConfig,
-            String path, boolean forceUpdate) {
-        boolean hasChanges = false;
-
-        Set<String> keys;
-        if (path.isEmpty()) {
-            keys = defaultConfig.getKeys(false);
-        } else {
-            keys = defaultConfig.getConfigurationSection(path).getKeys(false);
-        }
-
-        for (String key : keys) {
-            String currentPath = path.isEmpty() ? key : path + "." + key;
-
-            if (defaultConfig.isConfigurationSection(currentPath)) {
-                if (!currentConfig.isConfigurationSection(currentPath)) {
-                    currentConfig.createSection(currentPath);
-                    hasChanges = true;
-                }
-
-                if (validateAndUpdateSection(defaultConfig, currentConfig, currentPath, forceUpdate)) {
-                    hasChanges = true;
-                }
-            } else {
-                if (!currentConfig.contains(currentPath) || forceUpdate) {
-                    Object defaultValue = defaultConfig.get(currentPath);
-                    Object currentValue = currentConfig.get(currentPath);
-
-                    if (!defaultValue.equals(currentValue)) {
-                        currentConfig.set(currentPath, defaultValue);
-                        if (!currentConfig.contains(currentPath)) {
-                            plugin.getLogger().info("添加缺失的语言键: " + currentPath);
-                        } else {
-                            plugin.getLogger().info("更新语言键: " + currentPath);
-                        }
-                        hasChanges = true;
-                    }
-                }
-            }
-        }
-
-        return hasChanges;
-    }
-
-    private boolean migrateLegacyLanguageKeys(FileConfiguration config) {
-        String currentKey = "messages.target-beacon-disappear";
-        String legacyKey = "messages.target-beacon-dissappear";
-        if (!config.contains(currentKey) && config.contains(legacyKey)) {
-            config.set(currentKey, config.get(legacyKey));
+            current.save(file);
+            loadedLanguages.remove(language);
+            loadLanguageFile(language);
             return true;
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to sync language file: " + language);
+            return false;
         }
-        return false;
+    }
+
+    /** @return how many bundled language files were changed */
+    public int syncAllLanguageFiles() {
+        int updated = 0;
+        for (String language : LanguageFiles.BUNDLED) {
+            if (syncLanguageFile(language)) {
+                updated++;
+            }
+        }
+        return updated;
     }
 }

@@ -2,151 +2,143 @@ package org.momu.pathfinder.waypoint.service;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
 import org.momu.pathfinder.waypoint.model.Waypoint;
-import org.momu.pathfinder.util.KeyUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
+/**
+ * The saved waypoints. Every change is written to {@code waypoints.yml} in the background.
+ */
 public class WaypointService {
-    private WaypointService() {}
-    private static class Holder {
-        private static final WaypointService INSTANCE = new WaypointService();
-    }
-    public static WaypointService getInstance() { return Holder.INSTANCE; }
+    private static final WaypointService INSTANCE = new WaypointService();
 
     private final Map<String, Waypoint> waypoints = new HashMap<>();
-    private File storeFile;
+    private WaypointStorage storage;
 
-    public void init(PathFinderPlugin plugin) {
-        storeFile = new File(plugin.getDataFolder(), "waypoints.yml");
-        load();
+    private WaypointService() {
     }
 
+    public static WaypointService getInstance() {
+        return INSTANCE;
+    }
+
+    /** (Re)loads the waypoints from the plugin's data folder. */
+    public synchronized void init(PathFinderPlugin plugin) {
+        storage = new WaypointStorage(new File(plugin.getDataFolder(), "waypoints.yml"));
+        waypoints.clear();
+        for (Waypoint waypoint : storage.load()) {
+            waypoints.put(waypoint.getKey(), waypoint);
+        }
+    }
+
+    /** @return {@code false} if the name is empty or taken, the world is not loaded, or y is out of range */
     public synchronized boolean add(String name, String world, double x, double y, double z) {
         if (name == null || name.trim().isEmpty()) return false;
-        String key = KeyUtils.normalizeKey(name);
+        String key = Waypoint.keyOf(name);
         if (waypoints.containsKey(key)) return false;
-        World w = Bukkit.getWorld(world);
-        if (w == null) return false;
-        if (y < w.getMinHeight() || y >= w.getMaxHeight()) return false;
-        Waypoint wp = new Waypoint(name, world, x, y, z);
-        waypoints.put(key, wp);
+        if (!isValidPosition(world, y)) return false;
+        waypoints.put(key, new Waypoint(name, world, x, y, z));
         saveAsync();
         return true;
     }
 
-    public synchronized boolean remove(String nameOrKey) {
-        String key = KeyUtils.normalizeKey(nameOrKey);
-        Waypoint removed = waypoints.remove(key);
-        if (removed != null) { saveAsync(); return true; }
-        return false;
+    public synchronized boolean remove(String name) {
+        if (waypoints.remove(Waypoint.keyOf(name)) == null) return false;
+        saveAsync();
+        return true;
     }
 
     public synchronized boolean rename(String oldName, String newName) {
-        String oldKey = KeyUtils.normalizeKey(oldName);
-        String newKey = KeyUtils.normalizeKey(newName);
+        String oldKey = Waypoint.keyOf(oldName);
+        String newKey = Waypoint.keyOf(newName);
         if (!waypoints.containsKey(oldKey) || waypoints.containsKey(newKey)) return false;
-        Waypoint wp = waypoints.remove(oldKey);
-        wp.setName(newName);
-        waypoints.put(newKey, wp);
+        Waypoint waypoint = waypoints.remove(oldKey);
+        waypoint.setName(newName);
+        waypoints.put(newKey, waypoint);
         saveAsync();
         return true;
     }
 
+    /**
+     * Changes one field. {@code field} is {@code x}, {@code y}, {@code z} or {@code world}; a coordinate that is
+     * not a number leaves the old value in place.
+     */
     public synchronized boolean setField(String name, String field, String value) {
-        String key = KeyUtils.normalizeKey(name);
-        Waypoint wp = waypoints.get(key);
-        if (wp == null) return false;
-        switch (field.toLowerCase()) {
-            case "x": wp.setX(parseDouble(value, wp.getX())); break;
-            case "y": wp.setY(parseDouble(value, wp.getY())); break;
-            case "z": wp.setZ(parseDouble(value, wp.getZ())); break;
-            case "world":
+        Waypoint waypoint = waypoints.get(Waypoint.keyOf(name));
+        if (waypoint == null) return false;
+        switch (field.toLowerCase(Locale.ROOT)) {
+            case "x" -> waypoint.setX(parseDouble(value, waypoint.getX()));
+            case "y" -> waypoint.setY(parseDouble(value, waypoint.getY()));
+            case "z" -> waypoint.setZ(parseDouble(value, waypoint.getZ()));
+            case "world" -> {
                 if (Bukkit.getWorld(value) == null) return false;
-                wp.setWorld(value);
-                break;
-            default: return false;
+                waypoint.setWorld(value);
+            }
+            default -> {
+                return false;
+            }
         }
         saveAsync();
         return true;
     }
 
     public synchronized boolean move(String name, String world, double x, double y, double z) {
-        Waypoint wp = waypoints.get(KeyUtils.normalizeKey(name));
-        if (wp == null) return false;
-        World w = Bukkit.getWorld(world);
-        if (w == null) return false;
-        if (y < w.getMinHeight() || y >= w.getMaxHeight()) return false;
-        wp.setWorld(world);
-        wp.setX(x);
-        wp.setY(y);
-        wp.setZ(z);
+        Waypoint waypoint = waypoints.get(Waypoint.keyOf(name));
+        if (waypoint == null || !isValidPosition(world, y)) return false;
+        waypoint.setWorld(world);
+        waypoint.setX(x);
+        waypoint.setY(y);
+        waypoint.setZ(z);
         saveAsync();
         return true;
     }
 
-    public synchronized Waypoint get(String nameOrKey) {
-        return waypoints.get(KeyUtils.normalizeKey(nameOrKey));
+    public synchronized Waypoint get(String name) {
+        return waypoints.get(Waypoint.keyOf(name));
     }
 
+    /** All waypoints sorted by name, optionally only those in one world. */
     public synchronized List<Waypoint> list(String worldName) {
         List<Waypoint> list = new ArrayList<>(waypoints.values());
         if (worldName != null) {
-            list.removeIf(w -> !w.getWorld().equals(worldName));
+            list.removeIf(waypoint -> !waypoint.getWorld().equals(worldName));
         }
         list.sort(Comparator.comparing(Waypoint::getName, String::compareToIgnoreCase));
         return list;
     }
 
-    private void load() {
-        waypoints.clear();
-        if (storeFile == null || !storeFile.exists()) return;
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(storeFile);
-        ConfigurationSection ws = yaml.getConfigurationSection("waypoints");
-        if (ws == null) return;
-        for (String key : ws.getKeys(false)) {
-            ConfigurationSection c = ws.getConfigurationSection(key);
-            if (c == null) continue;
-            String name = c.getString("name", key);
-            String world = c.getString("world", "world");
-            double x = c.getDouble("x");
-            double y = c.getDouble("y");
-            double z = c.getDouble("z");
-            Waypoint wp = new Waypoint(name, world, x, y, z);
-            waypoints.put(wp.getKey(), wp);
-        }
+    private static boolean isValidPosition(String worldName, double y) {
+        World world = Bukkit.getWorld(worldName);
+        return world != null && y >= world.getMinHeight() && y < world.getMaxHeight();
     }
 
     private void saveAsync() {
         PathFinderPlugin plugin = PathFinderPlugin.getInstance();
-        if (plugin == null) return;
+        if (plugin == null || storage == null) return;
+        WaypointStorage target = storage;
+        List<WaypointStorage.Snapshot> snapshot = waypoints.values().stream().map(WaypointStorage.Snapshot::of).toList();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                if (storeFile == null) return;
-                YamlConfiguration yaml = new YamlConfiguration();
-                ConfigurationSection root = yaml.createSection("waypoints");
-                for (Map.Entry<String, Waypoint> entry : waypoints.entrySet()) {
-                    Waypoint wp = entry.getValue();
-                    ConfigurationSection c = root.createSection(entry.getKey());
-                    c.set("name", wp.getName());
-                    c.set("world", wp.getWorld());
-                    c.set("x", wp.getX());
-                    c.set("y", wp.getY());
-                    c.set("z", wp.getZ());
-                    c.set("createdAt", wp.getCreatedAt());
-                    c.set("updatedAt", wp.getUpdatedAt());
-                }
-                yaml.save(storeFile);
-            } catch (IOException ignored) {}
+                target.save(snapshot);
+            } catch (IOException e) {
+                plugin.getLogger().warning("Failed to save waypoints.yml: " + e.getMessage());
+            }
         });
     }
 
-    private static double parseDouble(String s, double fallback) {
-        try { return Double.parseDouble(s); } catch (Exception e) { return fallback; }
+    private static double parseDouble(String value, double fallback) {
+        try {
+            return Double.parseDouble(value);
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 }
