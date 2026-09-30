@@ -3,8 +3,12 @@ package org.momu.pathfinder.waypoint.model;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.momu.pathfinder.util.KeyUtils;
 
+import java.util.Locale;
+
+/**
+ * A named location that players can navigate to. Names are matched case-insensitively through {@link #getKey()}.
+ */
 public class Waypoint {
     private String key;
     private String name;
@@ -12,12 +16,12 @@ public class Waypoint {
     private double x;
     private double y;
     private double z;
-    private long createdAt;
+    private final long createdAt;
     private long updatedAt;
 
     public Waypoint(String name, String world, double x, double y, double z) {
         this.name = name;
-        this.key = KeyUtils.normalizeKey(name);
+        this.key = keyOf(name);
         this.world = world;
         this.x = x;
         this.y = y;
@@ -27,9 +31,14 @@ public class Waypoint {
         this.updatedAt = now;
     }
 
+    /** The lookup key for a waypoint name: trimmed and lower-cased. */
+    public static String keyOf(String name) {
+        return name == null ? null : name.trim().toLowerCase(Locale.ROOT);
+    }
+
     public String getKey() { return key; }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; this.key = KeyUtils.normalizeKey(name); touch(); }
+    public void setName(String name) { this.name = name; this.key = keyOf(name); touch(); }
     public String getWorld() { return world; }
     public void setWorld(String world) { this.world = world; touch(); }
     public double getX() { return x; }
@@ -41,6 +50,7 @@ public class Waypoint {
     public long getCreatedAt() { return createdAt; }
     public long getUpdatedAt() { return updatedAt; }
 
+    /** @return the location, or {@code null} if the world is not loaded */
     public Location toLocation() {
         World w = Bukkit.getWorld(world);
         if (w == null) return null;

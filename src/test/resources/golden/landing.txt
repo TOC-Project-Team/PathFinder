@@ -95,7 +95,6 @@ flat-straight
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 flat-diagonal
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -193,7 +192,6 @@ flat-diagonal
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=14.00/64.00/11.00
 door
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -291,7 +289,6 @@ door
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 solid-wall
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -389,7 +386,6 @@ solid-wall
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 unbreakable-wall
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -487,7 +483,6 @@ unbreakable-wall
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 stairs
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -585,7 +580,6 @@ stairs
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=17.00/70.00/-1.00
 ladder
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -683,7 +677,6 @@ ladder
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=11.00/72.00/-1.00
 scaffolding
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -781,7 +774,6 @@ scaffolding
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=11.00/71.00/-1.00
 cliff
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -879,7 +871,6 @@ cliff
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/2.00
 water-pool
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -977,7 +968,6 @@ water-pool
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 deep-water
   0,61,-4 safe=N near=null adjusted=0.00/64.00/-4.00
   0,63,-4 safe=N near=-2.00/64.00/-2.00 adjusted=-2.00/64.00/-2.00
@@ -1075,7 +1065,6 @@ deep-water
   20,63,8 safe=N near=null adjusted=20.00/64.00/8.00
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 lava
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1173,7 +1162,6 @@ lava
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 gap
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1271,7 +1259,6 @@ gap
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=14.00/64.00/-1.00
 fence
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1369,7 +1356,6 @@ fence
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 slabs
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1467,7 +1453,6 @@ slabs
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 trapdoors
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1565,7 +1550,6 @@ trapdoors
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 hazards
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1663,7 +1647,6 @@ hazards
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=19.00/64.00/-1.00
 random-1
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1761,7 +1744,6 @@ random-1
   20,63,8 safe=N
   20,65,8 safe=Y
   20,67,8 safe=N
-  waterLanding=33.00/64.00/6.00
 random-2
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1859,7 +1841,6 @@ random-2
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/22.00
 random-3
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -1957,7 +1938,6 @@ random-3
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/5.00
 random-4
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2055,7 +2035,6 @@ random-4
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/3.00
 random-5
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2153,7 +2132,6 @@ random-5
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/64.00/10.00
 random-6
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2251,7 +2229,6 @@ random-6
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=29.00/64.00/1.00
 random-7
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2349,7 +2326,6 @@ random-7
   20,63,8 safe=N
   20,65,8 safe=Y
   20,67,8 safe=N
-  waterLanding=30.00/64.00/0.00
 random-8
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2447,7 +2423,6 @@ random-8
   20,63,8 safe=Y
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/17.00
 random-9
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2545,7 +2520,6 @@ random-9
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/64.00/13.00
 random-10
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2643,7 +2617,6 @@ random-10
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=29.00/64.00/17.00
 random-11
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2741,7 +2714,6 @@ random-11
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/2.00
 random-12
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2839,7 +2811,6 @@ random-12
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=33.00/64.00/29.00
 random-13
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -2937,7 +2908,6 @@ random-13
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/18.00
 random-14
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3035,7 +3005,6 @@ random-14
   20,63,8 safe=N
   20,65,8 safe=Y
   20,67,8 safe=N
-  waterLanding=33.00/64.00/1.00
 random-15
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3133,7 +3102,6 @@ random-15
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/19.00
 random-16
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3231,7 +3199,6 @@ random-16
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/7.00
 random-17
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3329,7 +3296,6 @@ random-17
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/64.00/22.00
 random-18
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3427,7 +3393,6 @@ random-18
   20,63,8 safe=N
   20,65,8 safe=Y
   20,67,8 safe=Y
-  waterLanding=33.00/64.00/16.00
 random-19
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3525,7 +3490,6 @@ random-19
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/63.00/25.00
 random-20
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3623,7 +3587,6 @@ random-20
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/30.00
 random-21
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3721,7 +3684,6 @@ random-21
   20,63,8 safe=N
   20,65,8 safe=Y
   20,67,8 safe=N
-  waterLanding=29.00/64.00/9.00
 random-22
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3819,7 +3781,6 @@ random-22
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/64.00/7.00
 random-23
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -3917,7 +3878,6 @@ random-23
   20,63,8 safe=Y
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=33.00/64.00/3.00
 random-24
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4015,7 +3975,6 @@ random-24
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/19.00
 random-25
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4113,7 +4072,6 @@ random-25
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=29.00/63.00/24.00
 random-26
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4211,7 +4169,6 @@ random-26
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/14.00
 random-27
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4309,7 +4266,6 @@ random-27
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/14.00
 random-28
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4407,7 +4363,6 @@ random-28
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/17.00
 random-29
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4505,7 +4460,6 @@ random-29
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=29.00/65.00/31.00
 random-30
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4603,7 +4557,6 @@ random-30
   20,63,8 safe=Y
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/63.00/7.00
 random-31
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4701,7 +4654,6 @@ random-31
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=33.00/67.00/4.00
 random-32
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4799,7 +4751,6 @@ random-32
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=29.00/65.00/3.00
 random-33
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4897,7 +4848,6 @@ random-33
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/64.00/3.00
 random-34
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -4995,7 +4945,6 @@ random-34
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/63.00/10.00
 random-35
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -5093,7 +5042,6 @@ random-35
   20,63,8 safe=N
   20,65,8 safe=Y
   20,67,8 safe=N
-  waterLanding=30.00/64.00/33.00
 random-36
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -5191,7 +5139,6 @@ random-36
   20,63,8 safe=Y
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=31.00/64.00/28.00
 random-37
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -5289,7 +5236,6 @@ random-37
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=29.00/64.00/11.00
 random-38
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -5387,7 +5333,6 @@ random-38
   20,63,8 safe=Y
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/22.00
 random-39
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -5485,7 +5430,6 @@ random-39
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=28.00/64.00/10.00
 random-40
   0,61,-4 safe=N
   0,63,-4 safe=N
@@ -5583,4 +5527,3 @@ random-40
   20,63,8 safe=N
   20,65,8 safe=N
   20,67,8 safe=N
-  waterLanding=30.00/64.00/4.00

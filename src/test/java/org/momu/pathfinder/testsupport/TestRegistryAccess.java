@@ -28,7 +28,7 @@ public final class TestRegistryAccess implements RegistryAccess {
                     : null);
 
     @Override
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "removal"})
     public <T extends Keyed> Registry<T> getRegistry(Class<T> type) {
         if (type == BlockType.class) {
             return (Registry<T>) blockRegistry;

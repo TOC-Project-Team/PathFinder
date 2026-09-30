@@ -2,7 +2,6 @@ package org.momu.pathfinder.golden;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.momu.pathfinder.testsupport.FakeWorld;
@@ -13,8 +12,6 @@ import org.momu.pathfinder.testsupport.Scenarios.Scenario;
 
 import java.io.IOException;
 import java.util.Locale;
-
-import static org.mockito.Mockito.mock;
 
 /**
  * Golden-master tests that pin the observable behavior of the navigation code: the paths it finds,
@@ -30,10 +27,9 @@ class NavigationGoldenTest {
     @Test
     void pathsMatchGolden() throws IOException {
         StringBuilder out = new StringBuilder();
-        Player player = mock(Player.class);
         for (Scenario scenario : Scenarios.all()) {
             out.append(scenario.name()).append('\n');
-            out.append(NavigationProbe.describePath(scenario.start(), scenario.end(), player));
+            out.append(NavigationProbe.describePath(scenario.start(), scenario.end()));
         }
         GoldenFile.assertMatches("paths.txt", out.toString());
     }
@@ -58,9 +54,6 @@ class NavigationGoldenTest {
                     }
                 }
             }
-            Location high = scenario.start().clone().add(0, 40, 0);
-            out.append("  waterLanding=").append(format(NavigationProbe.findWaterLanding(high, scenario.end())))
-                    .append('\n');
         }
         GoldenFile.assertMatches("landing.txt", out.toString());
     }

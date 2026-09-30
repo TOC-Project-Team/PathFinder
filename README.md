@@ -197,12 +197,49 @@ This is a faster build path that skips the full clean step and runs `shadowJar` 
 ```text
 .
 ├── build.gradle
-├── gradle/
-├── scripts/
-│   ├── build-fatjar.sh
-│   └── quick-build.sh
-├── src/main/java/
-└── src/main/resources/
+├── scripts/                  build helpers
+├── src/main/java/org/momu/pathfinder/
+│   ├── api/                  public developer API (stable, used by other plugins)
+│   ├── bootstrap/            plugin entry point and config file watcher
+│   ├── command/              /toc command; nav/ holds the /toc nav subcommands
+│   ├── config/               pathfinder.yml settings and translated messages
+│   ├── gui/                  /toc cd and /toc admin chest menus
+│   ├── integration/          implementation of the developer API
+│   ├── listener/             Bukkit event listeners
+│   ├── navigation/
+│   │   ├── NavigationService entry point for starting any navigation
+│   │   ├── session/          who is navigating where, privacy, global on/off switch
+│   │   ├── runtime/          per-player guidance task, scheduling, water landing
+│   │   ├── pathfinding/      A* search, block classification, terrain rules
+│   │   ├── display/          particle path renderer and action bar
+│   │   └── locate/           beacon and stronghold search
+│   └── waypoint/             saved waypoints and waypoints.yml storage
+├── src/main/resources/       plugin.yml, config files, lang/*.yml
+└── src/test/                 tests
+```
+
+How a navigation runs:
+
+1. A command, menu click, listener or API call goes through `NavigationService`.
+2. `NavigationTracker` records the target and fires `PathFinderNavigationStartEvent`.
+3. `GuidanceTask` runs every `path_refresh_ticks`: it validates the target on the main thread, runs
+   `AStarPathfinder` asynchronously, then draws the path with `PathRenderer` and updates the action bar.
+4. Arriving, stopping or losing the target ends the navigation through `NavigationTracker.stopNavigation`,
+   which cancels the task and fires `PathFinderNavigationStopEvent`.
+
+### Tests
+
+```bash
+./gradlew test
+```
+
+The tests run without a Minecraft server. `NavigationGoldenTest` runs the pathfinder and renderer on
+fixed terrains and compares the paths, landing spots and particles against files in
+`src/test/resources/golden/`. If you change pathfinding or rendering on purpose, review the difference
+and update the files with:
+
+```bash
+./gradlew test -Dgolden.update=true
 ```
 
 ---

@@ -37,6 +37,7 @@ dependencies {
 test {
     useJUnitPlatform()
     maxHeapSize = '1g'
+    systemProperty 'golden.update', System.getProperty('golden.update', 'false')
 }
 
 java {

@@ -1,5 +1,7 @@
 package org.momu.pathfinder.command;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -7,19 +9,24 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.momu.pathfinder.presentation.listener.MasterListener;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
+import org.momu.pathfinder.command.nav.NavCommand;
 import org.momu.pathfinder.config.LanguageManager;
+import org.momu.pathfinder.config.Messages;
+import org.momu.pathfinder.gui.MenuManager;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
-public class MainCommand
-        implements CommandExecutor,
-        TabCompleter {
+/**
+ * {@code /toc <reload|cd|status|lang|admin|nav>}.
+ */
+public class MainCommand implements CommandExecutor, TabCompleter {
+    private static final String SEPARATOR = "═══════════════════════════════════";
+
     private final PathFinderPlugin plugin;
 
     public MainCommand(PathFinderPlugin plugin) {
@@ -28,357 +35,175 @@ public class MainCommand
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
-            String[] args) {
-
+                             String[] args) {
         if (args.length == 0) {
-            sendHelpMessage(sender, label);
+            sendHelp(sender, label);
             return true;
         }
-
-        String subCommand = args[0].toLowerCase();
-
-        switch (subCommand) {
-            case "reload" -> handleReload(sender);
-            case "cd" -> handlePlayerNavigation(sender);
-            case "status" -> handleStatusCheck(sender);
-            case "lang" -> handleLanguage(sender, args);
-            case "admin" -> handleAdminMenu(sender);
+        switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "reload" -> reload(sender);
+            case "cd" -> openNavigationMenu(sender);
+            case "status" -> showStatus(sender);
+            case "lang" -> LanguageCommand.execute(plugin, sender, args);
+            case "admin" -> openAdminMenu(sender);
             case "nav" -> {
                 try {
-                    NavCommands.handle(sender, args);
+                    NavCommand.execute(sender, args);
                 } catch (Exception e) {
-                    String errorMessage = sender instanceof Player player
-                            ? LanguageManager.getInstance().getString(player, "messages.nav-error", e.getMessage())
-                            : LanguageManager.getInstance().getString("messages.nav-error", e.getMessage());
-                    sender.sendMessage(Component.text(errorMessage, NamedTextColor.RED));
+                    red(sender, Messages.get(sender, "messages.nav-error", e.getMessage()));
                 }
             }
-            default -> {
-                String unknownMsg = sender instanceof Player
-                        ? LanguageManager.getInstance().getString((Player) sender, "messages.unknown-command", label)
-                        : LanguageManager.getInstance().getString("messages.unknown-command", label);
-                sender.sendMessage(Component.text(unknownMsg, NamedTextColor.RED));
-            }
+            default -> red(sender, Messages.get(sender, "messages.unknown-command", label));
         }
         return true;
     }
 
-    private void sendHelpMessage(CommandSender sender, String label) {
-        sender.sendMessage(Component.text("--- PathFinder v" + this.plugin.getPluginMeta().getVersion() + " ---",
+    private void sendHelp(CommandSender sender, String label) {
+        sender.sendMessage(Component.text("--- PathFinder v" + plugin.getPluginMeta().getVersion() + " ---",
                 NamedTextColor.GOLD));
-
         if (sender.hasPermission("toc.cd")) {
-            String cdMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.cd")
-                    : LanguageManager.getInstance().getString("messages.cd");
-            sender.sendMessage(Component.text("/" + label + " cd", NamedTextColor.AQUA).append(
-                    Component.text(cdMsg, NamedTextColor.GRAY)));
+            helpLine(sender, label, "cd", "messages.cd");
         }
-
-        String statusMsg = sender instanceof Player
-                ? LanguageManager.getInstance().getString((Player) sender, "messages.status")
-                : LanguageManager.getInstance().getString("messages.status");
-        sender.sendMessage(Component.text("/" + label + " status", NamedTextColor.AQUA).append(
-                Component.text(statusMsg, NamedTextColor.GRAY)));
-
-        String langMsg = sender instanceof Player
-                ? LanguageManager.getInstance().getString((Player) sender, "messages.lang")
-                : LanguageManager.getInstance().getString("messages.lang");
-        sender.sendMessage(Component.text("/" + label + " lang <language>", NamedTextColor.AQUA).append(
-                Component.text(langMsg, NamedTextColor.GRAY)));
-
+        helpLine(sender, label, "status", "messages.status");
+        helpLine(sender, label, "lang <language>", "messages.lang");
         if (sender.hasPermission("toc.admin")) {
-            String reloadMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.reload")
-                    : LanguageManager.getInstance().getString("messages.reload");
-            sender.sendMessage(Component.text("/" + label + " reload", NamedTextColor.AQUA).append(
-                    Component.text(reloadMsg, NamedTextColor.GRAY)));
-
-            String adminMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.admin")
-                    : LanguageManager.getInstance().getString("messages.admin");
-            sender.sendMessage(Component.text("/" + label + " admin", NamedTextColor.AQUA).append(
-                    Component.text(adminMsg, NamedTextColor.GRAY)));
+            helpLine(sender, label, "reload", "messages.reload");
+            helpLine(sender, label, "admin", "messages.admin");
         }
     }
 
-    private void handleReload(CommandSender sender) {
-        if (!sender.hasPermission("toc.admin")) {
-            String noPermMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.no-permission")
-                    : LanguageManager.getInstance().getString("messages.no-permission");
-            sender.sendMessage(Component.text(noPermMsg, NamedTextColor.RED));
+    private static void helpLine(CommandSender sender, String label, String usage, String descriptionKey) {
+        sender.sendMessage(Component.text("/" + label + " " + usage, NamedTextColor.AQUA)
+                .append(Component.text(Messages.get(sender, descriptionKey), NamedTextColor.GRAY)));
+    }
+
+    private boolean requireAdmin(CommandSender sender) {
+        if (sender.hasPermission("toc.admin")) {
+            return true;
+        }
+        red(sender, Messages.get(sender, "messages.no-permission"));
+        return false;
+    }
+
+    private void reload(CommandSender sender) {
+        if (!requireAdmin(sender)) {
             return;
         }
-
         try {
             plugin.reloadConfigurations();
-
-            String reloadSuccessMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.reload-success")
-                    : LanguageManager.getInstance().getString("messages.reload-success");
-            sender.sendMessage(Component.text(reloadSuccessMsg, NamedTextColor.GREEN));
+            sender.sendMessage(Component.text(Messages.get(sender, "messages.reload-success"), NamedTextColor.GREEN));
         } catch (Exception e) {
-            String reloadErrorMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.reload-error")
-                    : LanguageManager.getInstance().getString("messages.reload-error");
-            sender.sendMessage(Component.text(reloadErrorMsg, NamedTextColor.RED));
+            red(sender, Messages.get(sender, "messages.reload-error"));
             plugin.getLogger().severe("Reload failed: " + e.getMessage());
         }
     }
 
-    private void handlePlayerNavigation(CommandSender sender) {
+    private void openNavigationMenu(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text(
-                    LanguageManager.getInstance().getString("messages.console-cd-not-available"), NamedTextColor.RED));
-            sender.sendMessage(Component.text(
-                    LanguageManager.getInstance().getString("messages.console-cd-gui-required"), NamedTextColor.GRAY));
-            sender.sendMessage(Component.text(
-                    LanguageManager.getInstance().getString("messages.console-cd-alternative"), NamedTextColor.GRAY));
+            red(sender, Messages.get(sender, "messages.console-cd-not-available"));
+            gray(sender, "messages.console-cd-gui-required", "messages.console-cd-alternative");
             return;
         }
-
         if (!sender.hasPermission("toc.cd")) {
-            sender.sendMessage(Component.text(LanguageManager.getInstance().getString(player, "messages.no-permission"),
-                    NamedTextColor.RED));
+            red(sender, Messages.get(sender, "messages.no-permission"));
             return;
         }
-
-        MasterListener.getGuiManager().openPlayerNavigationMenu(player);
+        MenuManager.getInstance().openNavigationMenu(player);
     }
 
-    private void handleStatusCheck(CommandSender sender) {
-        if (!sender.hasPermission("toc.admin")) {
-            String noPermMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.no-permission")
-                    : LanguageManager.getInstance().getString("messages.no-permission");
-            sender.sendMessage(Component.text(noPermMsg, NamedTextColor.RED));
-            return;
-        }
-        Player player = sender instanceof Player ? (Player) sender : null;
-        sender.sendMessage(Component.text("", NamedTextColor.WHITE));
-        sender.sendMessage(Component.text("═══════════════════════════════════", NamedTextColor.AQUA));
-        sender.sendMessage(Component.text(LanguageManager.getInstance()
-                .getString(player, "messages.status-report-title"), NamedTextColor.GOLD));
-        sender.sendMessage(Component.text("═══════════════════════════════════", NamedTextColor.AQUA));
-
-        sender.sendMessage(Component.text(LanguageManager.getInstance()
-                .getString(player, "messages.status-plugin-version", plugin.getPluginMeta().getVersion()),
-                NamedTextColor.WHITE));
-
-        int playerCount = Bukkit.getOnlinePlayers().size();
-        int maxPlayers = Bukkit.getMaxPlayers();
-        sender.sendMessage(Component.text(LanguageManager.getInstance()
-                .getString(player, "messages.status-players-online", playerCount, maxPlayers), NamedTextColor.WHITE));
-
-        String serverVersion = Bukkit.getVersion();
-        sender.sendMessage(Component.text(LanguageManager.getInstance()
-                .getString(player, "messages.status-server", serverVersion), NamedTextColor.WHITE));
-
-        sender.sendMessage(Component.text("═══════════════════════════════════", NamedTextColor.AQUA));
-        sender.sendMessage(Component.text("", NamedTextColor.WHITE));
-    }
-
-    private void handleLanguage(CommandSender sender, String[] args) {
-        if (args.length == 1) {
-            if (sender instanceof Player player) {
-                String currentLang = LanguageManager.getInstance().getPlayerLanguage(player.getUniqueId());
-                if (currentLang != null) {
-                    sender.sendMessage(Component.text(
-                            LanguageManager.getInstance().getString(player, "messages.lang-current", currentLang),
-                            NamedTextColor.GREEN));
-                } else {
-                    sender.sendMessage(
-                            Component.text(LanguageManager.getInstance().getString(player, "messages.lang-default",
-                                    LanguageManager.getInstance().getCurrentLanguage()), NamedTextColor.GREEN));
-                }
-            } else {
-                sender.sendMessage(
-                        Component.text(LanguageManager.getInstance().getString("messages.lang-console-default",
-                                LanguageManager.getInstance().getCurrentLanguage()), NamedTextColor.GREEN));
-            }
-
-            String[] availableLanguages = LanguageManager.getInstance().getAvailableLanguages();
-            if (availableLanguages.length > 0) {
-                String langMsg = sender instanceof Player
-                        ? LanguageManager.getInstance().getString((Player) sender, "messages.lang-available",
-                                String.join(", ", availableLanguages))
-                        : LanguageManager.getInstance().getString("messages.lang-available",
-                                String.join(", ", availableLanguages));
-                sender.sendMessage(Component.text(langMsg, NamedTextColor.GRAY));
-            }
-            String usageMsg = sender instanceof Player
-                    ? LanguageManager.getInstance().getString((Player) sender, "messages.lang-usage")
-                    : LanguageManager.getInstance().getString("messages.lang-usage");
-            sender.sendMessage(Component.text(usageMsg, NamedTextColor.YELLOW));
-            return;
-        }
-
-        String language = args[1];
-
-        if (language.equalsIgnoreCase("reset")) {
-            if (sender instanceof Player player) {
-                if (!player.hasPermission("toc.lang")) {
-                    LanguageManager.getInstance().removePlayerLanguage(player.getUniqueId());
-                    sender.sendMessage(Component.text(
-                            LanguageManager.getInstance().getString(player, "messages.no-permission"),
-                            NamedTextColor.RED));
-                    return;
-                }
-                LanguageManager.getInstance().removePlayerLanguage(player.getUniqueId());
-                sender.sendMessage(Component.text(
-                        LanguageManager.getInstance().getString(player, "messages.lang-reset"), NamedTextColor.GREEN));
-            } else {
-                String cannotResetMsg = LanguageManager.getInstance().getString("messages.lang-console-cannot-reset");
-                sender.sendMessage(Component.text(cannotResetMsg, NamedTextColor.RED));
-            }
-            return;
-        }
-
-        if (sender instanceof Player player) {
-            if (!player.hasPermission("toc.lang")) {
-                LanguageManager.getInstance().removePlayerLanguage(player.getUniqueId());
-                sender.sendMessage(Component.text(
-                        LanguageManager.getInstance().getString(player, "messages.no-permission"),
-                        NamedTextColor.RED));
-                return;
-            }
-            boolean success = LanguageManager.getInstance().setPlayerLanguage(player.getUniqueId(), language);
-            if (success) {
-                String successMsg = LanguageManager.getInstance().getStringByLanguage(language, "messages.lang-set",
-                        language);
-                sender.sendMessage(Component.text(successMsg, NamedTextColor.GREEN));
-            } else {
-                sender.sendMessage(Component.text(
-                        LanguageManager.getInstance().getString(player, "messages.lang-not-found", language),
-                        NamedTextColor.RED));
-            }
-        } else {
-            if (LanguageManager.getInstance().isLanguageAvailable(language)) {
-                plugin.getConfig().set("language", language);
-                plugin.saveConfig();
-                LanguageManager.getInstance().loadLanguage();
-
-                String successMsg = LanguageManager.getInstance().getString("messages.lang-default-set", language);
-                sender.sendMessage(Component.text(successMsg, NamedTextColor.GREEN));
-                plugin.getLogger().info("Default language changed to: " + language);
-
-                sender.sendMessage(Component.text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", NamedTextColor.GREEN));
-                String cmdCdMsg = LanguageManager.getInstance().getString("messages.c-command-cd");
-                String cmdReloadMsg = LanguageManager.getInstance().getString("messages.c-command-reload");
-                String cmdStatusMsg = LanguageManager.getInstance().getString("messages.c-command-status");
-                String cmdAdminMsg = LanguageManager.getInstance().getString("messages.c-command-admin");
-
-                sender.sendMessage(Component.text(cmdCdMsg, NamedTextColor.WHITE));
-                sender.sendMessage(Component.text(cmdReloadMsg, NamedTextColor.WHITE));
-                sender.sendMessage(Component.text(cmdStatusMsg, NamedTextColor.WHITE));
-                sender.sendMessage(Component.text(cmdAdminMsg, NamedTextColor.WHITE));
-                sender.sendMessage(Component.text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", NamedTextColor.GREEN));
-
-            } else {
-                sender.sendMessage(
-                        Component.text(LanguageManager.getInstance().getString("messages.lang-not-found", language),
-                                NamedTextColor.RED));
-            }
-        }
-    }
-
-    private void handleAdminMenu(CommandSender sender) {
+    private void openAdminMenu(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(
-                    Component.text(LanguageManager.getInstance().getString("messages.console-admin-not-available"),
-                            NamedTextColor.RED));
-            sender.sendMessage(
-                    Component.text(LanguageManager.getInstance().getString("messages.console-admin-gui-required"),
-                            NamedTextColor.GRAY));
-            sender.sendMessage(Component.text(
-                    LanguageManager.getInstance().getString("messages.console-admin-commands"), NamedTextColor.GRAY));
-            sender.sendMessage(Component.text(LanguageManager.getInstance().getString("messages.console-admin-reload"),
-                    NamedTextColor.GRAY));
-            sender.sendMessage(Component.text(LanguageManager.getInstance().getString("messages.console-admin-status"),
-                    NamedTextColor.GRAY));
+            red(sender, Messages.get(sender, "messages.console-admin-not-available"));
+            gray(sender, "messages.console-admin-gui-required", "messages.console-admin-commands",
+                    "messages.console-admin-reload", "messages.console-admin-status");
             return;
         }
-
-        if (!sender.hasPermission("toc.admin")) {
-            sender.sendMessage(Component.text(LanguageManager.getInstance().getString(player, "messages.no-permission"),
-                    NamedTextColor.RED));
+        if (!requireAdmin(sender)) {
             return;
         }
+        MenuManager.getInstance().openAdminMenu(player);
+    }
 
-        MasterListener.getGuiManager().openMainMenu(player);
+    private void showStatus(CommandSender sender) {
+        if (!requireAdmin(sender)) {
+            return;
+        }
+        sender.sendMessage(Component.text("", NamedTextColor.WHITE));
+        sender.sendMessage(Component.text(SEPARATOR, NamedTextColor.AQUA));
+        sender.sendMessage(Component.text(Messages.get(sender, "messages.status-report-title"), NamedTextColor.GOLD));
+        sender.sendMessage(Component.text(SEPARATOR, NamedTextColor.AQUA));
+        white(sender, Messages.get(sender, "messages.status-plugin-version", plugin.getPluginMeta().getVersion()));
+        white(sender, Messages.get(sender, "messages.status-players-online",
+                Bukkit.getOnlinePlayers().size(), Bukkit.getMaxPlayers()));
+        white(sender, Messages.get(sender, "messages.status-server", Bukkit.getVersion()));
+        sender.sendMessage(Component.text(SEPARATOR, NamedTextColor.AQUA));
+        sender.sendMessage(Component.text("", NamedTextColor.WHITE));
+    }
+
+    private static void red(CommandSender sender, String message) {
+        sender.sendMessage(Component.text(message, NamedTextColor.RED));
+    }
+
+    private static void white(CommandSender sender, String message) {
+        sender.sendMessage(Component.text(message, NamedTextColor.WHITE));
+    }
+
+    private static void gray(CommandSender sender, String... keys) {
+        for (String key : keys) {
+            sender.sendMessage(Component.text(Messages.get(sender, key), NamedTextColor.GRAY));
+        }
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
-            String[] args) {
-        List<String> completions = new ArrayList<>();
-
+                                      String[] args) {
         if (args.length == 1) {
-            List<String> subCommands = new ArrayList<>();
-
-            subCommands.add("status");
-            subCommands.add("lang");
-
+            List<String> options = new ArrayList<>(List.of("status", "lang"));
             if (sender.hasPermission("toc.cd")) {
-                subCommands.add("cd");
+                options.add("cd");
             }
-
             if (sender.hasPermission("toc.admin")) {
-                subCommands.add("reload");
-                subCommands.add("admin");
-                subCommands.add("nav");
-            } else {
-                subCommands.add("nav");
+                options.add("reload");
+                options.add("admin");
             }
-
-            String partial = args[0].toLowerCase();
-            for (String cmd : subCommands) {
-                if (cmd.startsWith(partial)) {
-                    completions.add(cmd);
-                }
-            }
-        } else if (args.length >= 2 && args[0].equalsIgnoreCase("nav")) {
-            String partial = args[1].toLowerCase();
-            java.util.List<String> subs = new java.util.ArrayList<>();
-            java.util.function.Consumer<String> addIf = (perm) -> {
-                if (sender.hasPermission(perm) || sender.hasPermission("toc.nav.*") || sender.hasPermission("toc.admin")
-                        || !(sender instanceof Player) || ((Player) sender).isOp()) {
-                    subs.add(perm.substring("toc.nav.".length()));
-                }
-            };
-            addIf.accept("toc.nav.add");
-            addIf.accept("toc.nav.remove");
-            addIf.accept("toc.nav.rename");
-            addIf.accept("toc.nav.set");
-            addIf.accept("toc.nav.start");
-            if (sender.hasPermission("toc.nav.go") || sender.hasPermission("toc.nav.*")
-                    || !(sender instanceof Player))
-                subs.add("go");
-            if (sender.hasPermission("toc.nav.stop") || sender.hasPermission("toc.nav.*")
-                    || !(sender instanceof Player))
-                subs.add("stop");
-            if (sender.hasPermission("toc.nav.list") || sender.hasPermission("toc.nav.*")
-                    || !(sender instanceof Player))
-                subs.add("list");
-            if (sender.hasPermission("toc.view") || !(sender instanceof Player))
-                subs.add("view");
-            for (String c : subs)
-                if (c.startsWith(partial))
-                    completions.add(c);
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("lang")) {
-            String[] availableLanguages = LanguageManager.getInstance().getAvailableLanguages();
-            List<String> languages = new ArrayList<>(Arrays.asList(availableLanguages));
+            options.add("nav");
+            return matching(options, args[0]);
+        }
+        if (args[0].equalsIgnoreCase("nav")) {
+            return matching(navSubcommands(sender), args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("lang")) {
+            List<String> languages = new ArrayList<>(Arrays.asList(LanguageManager.getInstance().getAvailableLanguages()));
             languages.add("reset");
+            return matching(languages, args[1]);
+        }
+        return new ArrayList<>();
+    }
 
-            String partial = args[1].toLowerCase();
-            for (String lang : languages) {
-                if (lang.startsWith(partial)) {
-                    completions.add(lang);
-                }
+    private static List<String> navSubcommands(CommandSender sender) {
+        boolean console = !(sender instanceof Player);
+        boolean wildcard = sender.hasPermission("toc.nav.*");
+        boolean manager = wildcard || sender.hasPermission("toc.admin") || console || ((Player) sender).isOp();
+        List<String> options = new ArrayList<>();
+        for (String action : List.of("add", "remove", "rename", "set", "start")) {
+            if (manager || sender.hasPermission("toc.nav." + action)) {
+                options.add(action);
             }
         }
+        for (String action : List.of("go", "stop", "list")) {
+            if (sender.hasPermission("toc.nav." + action) || wildcard || console) {
+                options.add(action);
+            }
+        }
+        if (sender.hasPermission("toc.view") || console) {
+            options.add("view");
+        }
+        return options;
+    }
 
-        return completions;
+    private static List<String> matching(List<String> options, String typed) {
+        String prefix = typed.toLowerCase(Locale.ROOT);
+        return options.stream().filter(option -> option.startsWith(prefix))
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 }
