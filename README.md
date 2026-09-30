@@ -1,5 +1,7 @@
 # PathFinder Plugin Documentation
 
+**English** | [简体中文](README.zh-CN.md)
+
 > Latest supported server version: **26.1**  
 > Function: player navigation, waypoint management, and particle-based route guidance  
 > Build: Java 21 + Gradle + Shadow fat jar packaging
@@ -362,7 +364,7 @@ public void onStart(PathFinderNavigationStartEvent event) {
 }
 ```
 
-Stop events raised by PathFinder's asynchronous path worker (for example when a target player goes offline) are fired asynchronously; check `event.isAsynchronous()` before touching the world from such a listener.
+All events are fired on the main server thread, so listeners can safely use the Bukkit API.
 
 ---
 
