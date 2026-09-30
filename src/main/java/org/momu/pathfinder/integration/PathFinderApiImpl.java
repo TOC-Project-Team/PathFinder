@@ -11,10 +11,9 @@ import org.momu.pathfinder.api.PathFinderAPI;
 import org.momu.pathfinder.api.WaypointSnapshot;
 import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
-import org.momu.pathfinder.navigation.runtime.PathFinding;
-import org.momu.pathfinder.navigation.service.NavigationService;
-import org.momu.pathfinder.navigation.state.PlayerTracker;
-import org.momu.pathfinder.presentation.listener.MasterListener;
+import org.momu.pathfinder.navigation.NavigationService;
+import org.momu.pathfinder.navigation.session.ActiveNavigation;
+import org.momu.pathfinder.navigation.session.NavigationTracker;
 import org.momu.pathfinder.waypoint.model.Waypoint;
 import org.momu.pathfinder.waypoint.service.WaypointService;
 
@@ -73,15 +72,15 @@ public final class PathFinderApiImpl implements PathFinderAPI {
         if (!player.getWorld().equals(target.getWorld())) {
             return NavigationResult.WORLD_MISMATCH;
         }
-        PlayerTracker tracker = PlayerTracker.getInstance();
-        if (!tracker.canPlayerUseNavigation(player.getUniqueId())) {
+        NavigationTracker tracker = NavigationTracker.getInstance();
+        if (!tracker.canUseNavigation(player.getUniqueId())) {
             return NavigationResult.NAVIGATION_DISABLED;
         }
-        if (!NavigationService.getInstance().startForPlayer(player, target.clone(), displayName, type)) {
+        if (!NavigationService.getInstance().navigateToLocation(player, target.clone(), displayName, type)) {
             return NavigationResult.CANCELLED;
         }
         if (!showActionBar) {
-            tracker.suppressActionBarForCurrentSession(player.getUniqueId());
+            tracker.suppressActionBar(player.getUniqueId());
         }
         return NavigationResult.SUCCESS;
     }
@@ -98,25 +97,22 @@ public final class PathFinderApiImpl implements PathFinderAPI {
         if (!player.getWorld().equals(target.getWorld())) {
             return NavigationResult.WORLD_MISMATCH;
         }
-        PlayerTracker tracker = PlayerTracker.getInstance();
-        if (!tracker.canPlayerUseNavigation(player.getUniqueId())) {
+        NavigationTracker tracker = NavigationTracker.getInstance();
+        if (!tracker.canUseNavigation(player.getUniqueId())) {
             return NavigationResult.NAVIGATION_DISABLED;
         }
-        if (tracker.isNavigationBlockedByInvisibility(target)
+        if (tracker.isHiddenByInvisibility(target)
                 || (tracker.isLocationHidden(target.getUniqueId())
                     && !plugin.canBypassNavigationRestrictions(player))) {
             return NavigationResult.TARGET_UNAVAILABLE;
         }
-        if (target.getUniqueId().equals(tracker.getNavigationTarget(player.getUniqueId()))) {
+        ActiveNavigation current = tracker.getActive(player.getUniqueId());
+        if (current != null && target.getUniqueId().equals(current.targetPlayer())) {
             return NavigationResult.ALREADY_NAVIGATING;
         }
-        if (!tracker.setNavigationTarget(player.getUniqueId(), target.getUniqueId())) {
+        if (!NavigationService.getInstance().navigateToPlayer(player, target)) {
             return NavigationResult.CANCELLED;
         }
-        if (!MasterListener.getGuiManager().isParticleFeatureEnabled(player.getUniqueId())) {
-            MasterListener.getGuiManager().toggleParticleFeature(player.getUniqueId());
-        }
-        PathFinding.startPathfinding(player);
         return NavigationResult.SUCCESS;
     }
 
@@ -125,7 +121,7 @@ public final class PathFinderApiImpl implements PathFinderAPI {
         if (playerId == null) {
             return false;
         }
-        PlayerTracker tracker = PlayerTracker.getInstance();
+        NavigationTracker tracker = NavigationTracker.getInstance();
         boolean wasNavigating = tracker.isNavigating(playerId);
         tracker.stopNavigation(playerId, StopReason.API);
         return wasNavigating;
@@ -138,19 +134,19 @@ public final class PathFinderApiImpl implements PathFinderAPI {
 
     @Override
     public boolean isNavigating(UUID playerId) {
-        return playerId != null && PlayerTracker.getInstance().isNavigating(playerId);
+        return playerId != null && NavigationTracker.getInstance().isNavigating(playerId);
     }
 
     @Override
     public Optional<NavigationSession> getSession(UUID playerId) {
-        return Optional.ofNullable(PlayerTracker.getInstance().getSession(playerId));
+        return Optional.ofNullable(NavigationTracker.getInstance().getSession(playerId));
     }
 
     @Override
     public Collection<NavigationSession> getActiveSessions() {
-        PlayerTracker tracker = PlayerTracker.getInstance();
+        NavigationTracker tracker = NavigationTracker.getInstance();
         List<NavigationSession> sessions = new ArrayList<>();
-        for (UUID playerId : tracker.getAllNavigatingPlayers()) {
+        for (UUID playerId : tracker.getNavigatingPlayers()) {
             NavigationSession session = tracker.getSession(playerId);
             if (session != null) {
                 sessions.add(session);
@@ -161,22 +157,22 @@ public final class PathFinderApiImpl implements PathFinderAPI {
 
     @Override
     public boolean isNavigationEnabled() {
-        return PlayerTracker.getInstance().isNavigationEnabled();
+        return NavigationTracker.getInstance().isNavigationEnabled();
     }
 
     @Override
     public void setNavigationEnabled(boolean enabled) {
-        PlayerTracker.getInstance().setNavigationEnabled(enabled);
+        NavigationTracker.getInstance().setNavigationEnabled(enabled);
     }
 
     @Override
     public boolean isLocationHidden(UUID playerId) {
-        return playerId != null && PlayerTracker.getInstance().isLocationHidden(playerId);
+        return playerId != null && NavigationTracker.getInstance().isLocationHidden(playerId);
     }
 
     @Override
     public void setLocationHidden(UUID playerId, boolean hidden) {
-        PlayerTracker.getInstance().setLocationHidden(playerId, hidden);
+        NavigationTracker.getInstance().setLocationHidden(playerId, hidden);
     }
 
     @Override
