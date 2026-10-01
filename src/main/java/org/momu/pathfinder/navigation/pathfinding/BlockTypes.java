@@ -40,6 +40,12 @@ public final class BlockTypes {
     static final int FALL_DAMAGE_50 = 1 << 17;
     static final int LADDER = 1 << 18;
     static final int BANNER = 1 << 19;
+    /** Iron doors and iron trapdoors: they only open with redstone. */
+    static final int IRON_DOOR = 1 << 20;
+    /** Buttons, levers and pressure plates, which the player can use to open an iron door. */
+    static final int ACTIVATOR = 1 << 21;
+    /** Activators that only power for a moment (buttons and pressure plates, not levers). */
+    static final int MOMENTARY = 1 << 22;
     private static final int KNOWN = 1;
 
     private static final int[] FLAGS = new int[Material.values().length];
@@ -103,6 +109,15 @@ public final class BlockTypes {
         }
         if ((trapdoor || door || gate) && !name.startsWith("IRON_")) {
             flags |= OPENABLE;
+        } else if (trapdoor || door) {
+            flags |= IRON_DOOR;
+        }
+        if (isTagged(() -> Tag.BUTTONS, material) || name.endsWith("_BUTTON")
+                || isTagged(() -> Tag.PRESSURE_PLATES, material) || name.endsWith("PRESSURE_PLATE")) {
+            flags |= ACTIVATOR | MOMENTARY;
+        }
+        if (name.equals("LEVER")) {
+            flags |= ACTIVATOR;
         }
         if (name.contains("BANNER")) {
             flags |= BANNER;

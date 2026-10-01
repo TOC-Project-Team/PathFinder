@@ -397,6 +397,7 @@ public final class AStarPathfinder {
         double feet = startFeet;
         double peak = startFeet;
         boolean airborne = false;
+        boolean inIronDoor = false;
         move.passedDoor = false;
         move.passedTrapdoor = false;
 
@@ -425,6 +426,15 @@ public final class AStarPathfinder {
                                 continue;
                             }
                             boolean openable = c.has(BlockTypes.OPENABLE);
+                            if (c.has(BlockTypes.IRON_DOOR) && bodyInCell) {
+                                inIronDoor = true;
+                                int passage = terrain.ironDoorPassage(cellX, cellY, cellZ, dx, dz);
+                                if (passage == TerrainView.DOOR_OPENS) {
+                                    openable = true;
+                                } else if (passage == TerrainView.DOOR_SHUT && (cellX != ax || cellZ != az)) {
+                                    return move.blocked(cellX, cellY, cellZ);
+                                }
+                            }
                             double[] boxes = c.boxes;
                             for (int k = 0; k < boxes.length; k += 6) {
                                 double top = cellY + boxes[k + 4];
@@ -493,6 +503,10 @@ public final class AStarPathfinder {
 
         // Walking up stairs rises in half steps; only a real jump needs to go straight up first.
         boolean jumped = jumping && peak - startFeet > STEP_HEIGHT + EPS;
+        if (jumped && inIronDoor) {
+            // Never jump in an iron door's doorway: it can shut on the player.
+            return move.failed();
+        }
         if (jumped && !hasHeadroom(from, ax, az, startFeet, peak)) {
             return false;
         }
@@ -611,7 +625,7 @@ public final class AStarPathfinder {
         move.reset();
         boolean holding = (from.kind & (Stand.CLIMB | Stand.SWIM)) != 0;
         boolean canJump = (from.kind & Stand.GROUND) != 0 && (from.floorFlags & BlockTypes.NO_JUMP) == 0;
-        if (!holding && !canJump) {
+        if (!holding && (!canJump || inIronDoor(from))) {
             return move.failed();
         }
         int x = from.x, y = from.y + 1, z = from.z;
@@ -721,7 +735,21 @@ public final class AStarPathfinder {
                 && (node.floorFlags & (BlockTypes.NO_JUMP | BlockTypes.SLOW)) == 0;
     }
 
+    /** Whether the player's body at the node is inside an iron door's block. */
+    private boolean inIronDoor(PathNode node) {
+        int topY = (int) Math.floor(node.feetY + HEIGHT - EPS);
+        for (int y = (int) Math.floor(node.feetY); y <= topY; y++) {
+            if (terrain.cell(node.x, y, node.z).has(BlockTypes.IRON_DOOR)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void gapJumps(PathNode current) {
+        if (inIronDoor(current)) {
+            return;
+        }
         int reach = Math.min(PathfinderConfig.MAX_BLOCK_JUMP_DISTANCE, MAX_JUMP_REACH);
         int minY = current.y - Math.max(0, PathfinderConfig.MAX_SAFE_FALL_HEIGHT) - 1;
 
@@ -826,7 +854,7 @@ public final class AStarPathfinder {
                     for (int y = y0; y <= y1; y++) {
                         TerrainCell c = terrain.cell(x, y, z, from, null);
                         boolean bodyInCell = y + 1 > feet + EPS && y < feet + HEIGHT - EPS;
-                        if (bodyInCell && (c.water || c.has(BlockTypes.BODY_HAZARD))) {
+                        if (bodyInCell && (c.water || c.has(BlockTypes.BODY_HAZARD | BlockTypes.IRON_DOOR))) {
                             return false;
                         }
                         if (c.has(BlockTypes.PLATFORM)) {
