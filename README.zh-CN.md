@@ -164,7 +164,7 @@ path_refresh_ticks: 30
 `./scripts/build-fatjar.sh` 生成的主要文件位于：
 
 ```text
-.gradle-build/libs/PathFinder-1.8.0-all.jar
+.gradle-build/libs/PathFinder-1.9.0-all.jar
 ```
 
 脚本从 `.gradle-build/libs/*-all.jar` 中找到最终文件，所以文件名会跟随 `build.gradle` 里声明的版本号。
@@ -253,7 +253,7 @@ RELEASE_COPY=1 ./scripts/build-fatjar.sh
    }
 
    dependencies {
-       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.8.0'
+       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.9.0'
    }
    ```
 
@@ -270,12 +270,12 @@ RELEASE_COPY=1 ./scripts/build-fatjar.sh
    <dependency>
        <groupId>com.github.TOC-Project-Team</groupId>
        <artifactId>PathFinder-source</artifactId>
-       <version>1.8.0</version>
+       <version>1.9.0</version>
        <scope>provided</scope>
    </dependency>
    ```
 
-   也可以把发布的 jar 放进项目，使用 `compileOnly files('libs/PathFinder-1.8.0-all.jar')`。
+   也可以把发布的 jar 放进项目，使用 `compileOnly files('libs/PathFinder-1.9.0-all.jar')`。
 
 3. 获取 API 实例：
 

@@ -164,7 +164,7 @@ This script:
 The main artifact produced by `./scripts/build-fatjar.sh` is written to:
 
 ```text
-.gradle-build/libs/PathFinder-1.8.0-all.jar
+.gradle-build/libs/PathFinder-1.9.0-all.jar
 ```
 
 The script resolves the final file from `.gradle-build/libs/*-all.jar`, so the exact filename follows the version declared in `build.gradle`.
@@ -255,7 +255,7 @@ Other plugins can control PathFinder through a Java API: start and stop navigati
    }
 
    dependencies {
-       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.8.0'
+       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.9.0'
    }
    ```
 
@@ -272,12 +272,12 @@ Other plugins can control PathFinder through a Java API: start and stop navigati
    <dependency>
        <groupId>com.github.TOC-Project-Team</groupId>
        <artifactId>PathFinder-source</artifactId>
-       <version>1.8.0</version>
+       <version>1.9.0</version>
        <scope>provided</scope>
    </dependency>
    ```
 
-   Alternatively, put the release jar in your project and use `compileOnly files('libs/PathFinder-1.8.0-all.jar')`.
+   Alternatively, put the release jar in your project and use `compileOnly files('libs/PathFinder-1.9.0-all.jar')`.
 
 3. Get the API instance:
 
