@@ -46,6 +46,9 @@ public final class BlockTypes {
     static final int ACTIVATOR = 1 << 21;
     /** Activators that only power for a moment (buttons and pressure plates, not levers). */
     static final int MOMENTARY = 1 << 22;
+    static final int PRESSURE_PLATE = 1 << 23;
+    /** Full blocks that do not pass redstone power on (glass, leaves, ice, pistons...). */
+    static final int NOT_CONDUCTOR = 1 << 24;
     private static final int KNOWN = 1;
 
     private static final int[] FLAGS = new int[Material.values().length];
@@ -112,9 +115,15 @@ public final class BlockTypes {
         } else if (trapdoor || door) {
             flags |= IRON_DOOR;
         }
-        if (isTagged(() -> Tag.BUTTONS, material) || name.endsWith("_BUTTON")
-                || isTagged(() -> Tag.PRESSURE_PLATES, material) || name.endsWith("PRESSURE_PLATE")) {
+        if (isTagged(() -> Tag.BUTTONS, material) || name.endsWith("_BUTTON")) {
             flags |= ACTIVATOR | MOMENTARY;
+        }
+        if (isTagged(() -> Tag.PRESSURE_PLATES, material) || name.endsWith("PRESSURE_PLATE")) {
+            flags |= ACTIVATOR | MOMENTARY | PRESSURE_PLATE;
+        }
+        if (name.contains("GLASS") || name.contains("LEAVES") || name.equals("ICE") || name.contains("PISTON")
+                || name.equals("OBSERVER") || name.equals("REDSTONE_BLOCK") || name.equals("TARGET")) {
+            flags |= NOT_CONDUCTOR;
         }
         if (name.equals("LEVER")) {
             flags |= ACTIVATOR;

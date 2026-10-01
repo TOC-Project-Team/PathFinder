@@ -1,6 +1,10 @@
 package org.momu.pathfinder.navigation.pathfinding;
 
 import org.bukkit.World;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.FaceAttachable;
 
 import static org.momu.pathfinder.navigation.pathfinding.PlayerBody.*;
 
@@ -20,7 +24,7 @@ final class TerrainView {
     private final BlockMap<TerrainCell> cells = new BlockMap<>(8192);
     private final BlockMap<Stand> stands = new BlockMap<>(4096);
     private final BlockFlagCache loadedChunks = new BlockFlagCache(64);
-    /** Buttons, levers and pressure plates around each iron door block that was looked at. */
+    /** Buttons, levers and pressure plates powering each iron door block that was looked at. */
     private final BlockMap<int[]> activatorsByDoor = new BlockMap<>(16);
 
     TerrainView(World world) {
@@ -86,23 +90,24 @@ final class TerrainView {
     // Iron doors
     // ---------------------------------------------------------------------------------------------------------
 
-    /** Iron door reach: switches this far out from the door, beside the frame, can be used. */
-    private static final int SWITCH_REACH = 2;
+    private static final int[][] FACES = {
+            { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 }
+    };
 
-    /** The door opens for the player: a switch is usable from the side they come from. */
+    /** The door opens for the player: a switch that powers it is usable from the side they come from. */
     static final int DOOR_OPENS = 0;
     /** Pass only where the door's current collision allows it (it is open, or held open by a lever). */
     static final int DOOR_AS_IS = 1;
-    /** The door may be open right now, but only switches on the far side can open it: do not rely on it. */
+    /** The door may be open right now, but only switches on the far side power it: do not rely on it. */
     static final int DOOR_SHUT = 2;
 
     /**
-     * How the iron door block at (x, y, z) behaves for a player moving in direction (dx, dz). A switch counts
-     * when it is in front of the door on the player's side, at most {@link #SWITCH_REACH} blocks out, no more
-     * than one block to either side of the doorway and within two blocks up or down.
+     * How the iron door block at (x, y, z) behaves for a player moving in direction (dx, dz). Only switches that
+     * really power the door count (see {@link #switchesPowering}), and only those on the side the player comes
+     * from, no more than one block to either side of the doorway.
      */
     int ironDoorPassage(int x, int y, int z, int dx, int dz) {
-        int[] switches = activatorsNear(x, y, z);
+        int[] switches = switchesPowering(x, y, z);
         boolean momentaryElsewhere = false;
         for (int i = 0; i < switches.length; i += 4) {
             int ox = switches[i], oz = switches[i + 2];
@@ -123,35 +128,101 @@ final class TerrainView {
         return momentaryElsewhere ? DOOR_SHUT : DOOR_AS_IS;
     }
 
-    /** Offsets (dx, dy, dz, momentary) of every switch around the door block, looked up once per search. */
-    private int[] activatorsNear(int x, int y, int z) {
+    /**
+     * Offsets (dx, dy, dz, momentary) from the given door block of every button, lever and pressure plate that
+     * powers the door, following vanilla redstone rules. A switch powers the door when it is
+     * <ul>
+     *     <li>right next to either half of the door, or</li>
+     *     <li>attached to a solid, redstone-conducting block that touches either half (a button or lever powers
+     *     the block it is attached to, a pressure plate the block under it).</li>
+     * </ul>
+     * Longer redstone circuits (dust, repeaters...) are not followed.
+     */
+    private int[] switchesPowering(int x, int y, int z) {
         long key = BlockKey.of(x, y, z);
         int[] cached = activatorsByDoor.get(key);
         if (cached != null) {
             return cached;
         }
-        int[] found = new int[0];
-        int count = 0;
-        for (int ox = -SWITCH_REACH; ox <= SWITCH_REACH; ox++) {
-            for (int oz = -SWITCH_REACH; oz <= SWITCH_REACH; oz++) {
-                for (int oy = -2; oy <= 2; oy++) {
-                    TerrainCell c = cell(x + ox, y + oy, z + oz);
-                    if (!c.has(BlockTypes.ACTIVATOR)) {
-                        continue;
+        java.util.List<int[]> found = new java.util.ArrayList<>(2);
+        // Both halves of a door: the block itself and an iron door block directly above or below it.
+        for (int halfY = y - 1; halfY <= y + 1; halfY++) {
+            if (halfY != y && !cell(x, halfY, z).has(BlockTypes.IRON_DOOR)) {
+                continue;
+            }
+            for (int[] face : FACES) {
+                int nx = x + face[0], ny = halfY + face[1], nz = z + face[2];
+                TerrainCell neighbor = cell(nx, ny, nz);
+                if (neighbor.has(BlockTypes.ACTIVATOR)) {
+                    addSwitch(found, nx, ny, nz, neighbor, x, y, z);
+                    continue;
+                }
+                if (!conductsRedstone(neighbor)) {
+                    continue;
+                }
+                for (int[] face2 : FACES) {
+                    int mx = nx + face2[0], my = ny + face2[1], mz = nz + face2[2];
+                    TerrainCell candidate = cell(mx, my, mz);
+                    if (candidate.has(BlockTypes.ACTIVATOR) && isAttachedTo(mx, my, mz, candidate, nx, ny, nz)) {
+                        addSwitch(found, mx, my, mz, candidate, x, y, z);
                     }
-                    if (count + 4 > found.length) {
-                        found = java.util.Arrays.copyOf(found, Math.max(8, found.length * 2));
-                    }
-                    found[count++] = ox;
-                    found[count++] = oy;
-                    found[count++] = oz;
-                    found[count++] = c.has(BlockTypes.MOMENTARY) ? 1 : 0;
                 }
             }
         }
-        int[] result = java.util.Arrays.copyOf(found, count);
+        int[] result = new int[found.size() * 4];
+        for (int i = 0; i < found.size(); i++) {
+            System.arraycopy(found.get(i), 0, result, i * 4, 4);
+        }
         activatorsByDoor.put(key, result);
         return result;
+    }
+
+    private static void addSwitch(java.util.List<int[]> found, int sx, int sy, int sz, TerrainCell cell,
+                                  int doorX, int doorY, int doorZ) {
+        int[] entry = { sx - doorX, sy - doorY, sz - doorZ, cell.has(BlockTypes.MOMENTARY) ? 1 : 0 };
+        for (int[] existing : found) {
+            if (java.util.Arrays.equals(existing, entry)) {
+                return;
+            }
+        }
+        found.add(entry);
+    }
+
+    /** Full, opaque-style blocks pass strong power from an attached switch on to their neighbors. */
+    private static boolean conductsRedstone(TerrainCell cell) {
+        double[] b = cell.boxes;
+        return b.length == 6 && b[0] <= 0 && b[1] <= 0 && b[2] <= 0 && b[3] >= 1 && b[4] >= 1 && b[5] >= 1
+                && !cell.has(BlockTypes.NOT_CONDUCTOR | BlockTypes.PLATFORM | BlockTypes.ACTIVATOR);
+    }
+
+    /** Whether the switch at (sx, sy, sz) strongly powers the block at (bx, by, bz). */
+    private boolean isAttachedTo(int sx, int sy, int sz, TerrainCell cell, int bx, int by, int bz) {
+        if (cell.has(BlockTypes.PRESSURE_PLATE)) {
+            return bx == sx && bz == sz && by == sy - 1;
+        }
+        try {
+            BlockData data = world.getBlockAt(sx, sy, sz).getBlockData();
+            if (!(data instanceof FaceAttachable attachable)) {
+                return false;
+            }
+            int ax = sx, ay = sy, az = sz;
+            switch (attachable.getAttachedFace()) {
+                case FLOOR -> ay--;
+                case CEILING -> ay++;
+                default -> {
+                    if (!(data instanceof Directional directional)) {
+                        return false;
+                    }
+                    BlockFace facing = directional.getFacing();
+                    ax -= facing.getModX();
+                    ay -= facing.getModY();
+                    az -= facing.getModZ();
+                }
+            }
+            return ax == bx && ay == by && az == bz;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     // ---------------------------------------------------------------------------------------------------------
