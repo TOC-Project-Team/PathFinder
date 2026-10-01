@@ -39,8 +39,8 @@ public final class AStarPathfinder {
     /** Largest gap when landing higher or lower than the take-off: a jump of at most 4 blocks. */
     private static final double MAX_HEIGHT_CHANGE_GAP = 3.0;
     /**
-     * Largest gaps when jumping off the top edge of a ladder, whose small plate gives a weak take-off: a jump of
-     * at most 3 blocks to the same height or lower, and 2 blocks to a block higher up.
+     * Largest gaps when jumping off the top edge of a ladder or door, whose thin panel gives a weak take-off: a
+     * jump of at most 3 blocks to the same height or lower, and 2 blocks to a block higher up.
      */
     private static final double MAX_LADDER_TOP_GAP = 2.0;
     private static final double MAX_LADDER_TOP_UP_GAP = 1.0;
@@ -179,6 +179,11 @@ public final class AStarPathfinder {
                 cost += PathfinderConfig.JUMP_COST;
             }
             relax(current, cost, 0, 0);
+        }
+
+        if (climbOntoDoor(current)) {
+            relax(current, PathfinderConfig.STRAIGHT_COST + PathfinderConfig.VERTICAL_COST
+                    + PathfinderConfig.JUMP_COST, 0, 0);
         }
 
         if (descend(current)) {
@@ -651,6 +656,29 @@ public final class AStarPathfinder {
         }
     }
 
+    /**
+     * The door jump: standing inside a wooden door's block, the player shuts the door on themselves and jumps
+     * up through it onto the door's top edge. Iron doors cannot be shut by hand, so this only works with doors
+     * the player can open.
+     */
+    private boolean climbOntoDoor(PathNode from) {
+        move.reset();
+        if ((from.kind & Stand.GROUND) == 0 || (from.floorFlags & BlockTypes.NO_JUMP) != 0) {
+            return move.failed();
+        }
+        int x = from.x, y = from.y, z = from.z;
+        TerrainCell lower = terrain.cell(x, y, z, from, null);
+        TerrainCell upper = terrain.cell(x, y + 1, z, from, null);
+        if (!lower.has(BlockTypes.DOOR) || !lower.has(BlockTypes.OPENABLE) || !upper.has(BlockTypes.DOOR)) {
+            return move.failed();
+        }
+        Stand stand = terrain.stand(x, y + 2, z, from, null);
+        if (!stand.valid || !stand.is(Stand.GROUND) || (stand.floorFlags & BlockTypes.DOOR) == 0) {
+            return move.failed();
+        }
+        return move.land(x, y + 2, z, stand, MoveType.JUMP, 0.0);
+    }
+
     /** Climbing or swimming down, sneaking down scaffolding, or digging through the floor. */
     private boolean descend(PathNode from) {
         move.reset();
@@ -792,7 +820,7 @@ public final class AStarPathfinder {
                     }
                     double rise = stand.feet - current.feetY;
                     double maxGap;
-                    if ((current.floorFlags & BlockTypes.LADDER) != 0) {
+                    if ((current.floorFlags & (BlockTypes.LADDER | BlockTypes.DOOR)) != 0) {
                         maxGap = rise > FLAT_JUMP_TOLERANCE ? MAX_LADDER_TOP_UP_GAP : MAX_LADDER_TOP_GAP;
                     } else {
                         maxGap = Math.abs(rise) > FLAT_JUMP_TOLERANCE ? MAX_HEIGHT_CHANGE_GAP : MAX_FLAT_GAP;
