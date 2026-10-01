@@ -37,9 +37,12 @@ final class TerrainView {
         return cell;
     }
 
-    /** Same as {@link #cell(int, int, int)}, but blocks broken to get here or by the move read as air. */
+    /**
+     * Same as {@link #cell(int, int, int)}, but blocks broken anywhere on the way to {@code from}, or by the move,
+     * read as air.
+     */
     TerrainCell cell(int x, int y, int z, PathNode from, MoveResult move) {
-        if ((from != null && from.brokenKeys.length > 0) || (move != null && move.breakCount > 0)) {
+        if ((from != null && from.breaks != null) || (move != null && move.breakCount > 0)) {
             long key = BlockKey.of(x, y, z);
             if ((from != null && from.isBroken(key)) || (move != null && move.isBroken(key))) {
                 return TerrainCell.AIR;
@@ -134,12 +137,16 @@ final class TerrainView {
         return stand;
     }
 
-    /** {@link #stand(int, int, int)} for a move that breaks blocks; uncached because breaking changes it. */
+    /**
+     * {@link #stand(int, int, int)} as seen after the blocks broken on the way to {@code from} and by the move.
+     * Only positions next to a broken block are recomputed; everything else comes from the cache.
+     */
     Stand stand(int x, int y, int z, PathNode from, MoveResult move) {
-        if ((from == null || from.brokenKeys.length == 0) && (move == null || move.breakCount == 0)) {
-            return stand(x, y, z);
+        boolean changed = move != null && move.breakCount > 0;
+        if (!changed && from != null && from.breaks != null) {
+            changed = from.hasBrokenNear(x, z, y - 1, y + 3);
         }
-        return computeStand(x, y, z, from, move);
+        return changed ? computeStand(x, y, z, from, move) : stand(x, y, z);
     }
 
     private Stand computeStand(int x, int y, int z, PathNode from, MoveResult move) {

@@ -36,8 +36,14 @@ import static org.momu.pathfinder.navigation.pathfinding.PlayerBody.*;
 public final class AStarPathfinder {
     /** Largest gap (in blocks between the two blocks' edges) a sprint jump clears on flat ground. */
     private static final double MAX_FLAT_GAP = 3.0;
-    /** Largest gap when landing higher or lower than the take-off: a jump of at most 3 blocks. */
-    private static final double MAX_HEIGHT_CHANGE_GAP = 2.0;
+    /** Largest gap when landing higher or lower than the take-off: a jump of at most 4 blocks. */
+    private static final double MAX_HEIGHT_CHANGE_GAP = 3.0;
+    /**
+     * Largest gaps when jumping off the top edge of a ladder, whose small plate gives a weak take-off: a jump of
+     * at most 3 blocks to the same height or lower, and 2 blocks to a block higher up.
+     */
+    private static final double MAX_LADDER_TOP_GAP = 2.0;
+    private static final double MAX_LADDER_TOP_UP_GAP = 1.0;
     /** Height differences up to this (carpets, snow layers) still count as a flat jump. */
     private static final double FLAT_JUMP_TOLERANCE = 0.25;
     private static final int MAX_JUMP_REACH = 5;
@@ -752,12 +758,17 @@ public final class AStarPathfinder {
                 }
                 int tx = current.x + dx, tz = current.z + dz;
                 for (int ty = current.y + 1; ty >= minY; ty--) {
-                    Stand stand = terrain.stand(tx, ty, tz);
+                    Stand stand = terrain.stand(tx, ty, tz, current, null);
                     if (!stand.valid || !stand.is(Stand.GROUND) || stand.is(Stand.SWIM)) {
                         continue;
                     }
                     double rise = stand.feet - current.feetY;
-                    double maxGap = Math.abs(rise) > FLAT_JUMP_TOLERANCE ? MAX_HEIGHT_CHANGE_GAP : MAX_FLAT_GAP;
+                    double maxGap;
+                    if ((current.floorFlags & BlockTypes.LADDER) != 0) {
+                        maxGap = rise > FLAT_JUMP_TOLERANCE ? MAX_LADDER_TOP_UP_GAP : MAX_LADDER_TOP_GAP;
+                    } else {
+                        maxGap = Math.abs(rise) > FLAT_JUMP_TOLERANCE ? MAX_HEIGHT_CHANGE_GAP : MAX_FLAT_GAP;
+                    }
                     if (rise > 1.0 + EPS || gap > maxGap + EPS) {
                         continue;
                     }
@@ -780,7 +791,7 @@ public final class AStarPathfinder {
 
     private boolean hasWalkingFloor(int x, int z, PathNode from) {
         for (int y = from.y - 1; y <= from.y + 1; y++) {
-            Stand stand = terrain.stand(x, y, z);
+            Stand stand = terrain.stand(x, y, z, from, null);
             if (stand.valid && stand.is(Stand.GROUND) && !stand.is(Stand.SWIM)
                     && Math.abs(stand.feet - from.feetY) <= STEP_HEIGHT + EPS) {
                 return true;

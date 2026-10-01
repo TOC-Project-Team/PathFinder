@@ -34,8 +34,15 @@ public final class PathNode {
     int kind;
     /** {@link BlockTypes} flags of the block the player stands on. */
     int floorFlags;
-    /** Blocks broken to get here, which read as air for the next move. */
+    /** Blocks broken by the step to this node. */
     long[] brokenKeys = NO_BREAKS;
+    /**
+     * The latest node on the way here (this one included) that broke blocks, or {@code null}. Together with
+     * {@link #earlierBreaks} it lists every block broken on the way, all of which read as air from here on.
+     */
+    PathNode breaks;
+    /** For a node that broke blocks: the breaking node before it on the way here. */
+    private PathNode earlierBreaks;
     private List<Location> blocksToBreak = Collections.emptyList();
     private boolean nearDoor;
     private boolean nearFenceGate;
@@ -70,11 +77,16 @@ public final class PathNode {
         this.floorFlags = move.floorFlags;
         this.dirX = dirX;
         this.dirZ = dirZ;
+        PathNode inherited = parent == null ? null : parent.breaks;
         if (move.breakCount == 0) {
             this.brokenKeys = NO_BREAKS;
             this.blocksToBreak = Collections.emptyList();
+            this.breaks = inherited;
+            this.earlierBreaks = null;
             return;
         }
+        this.breaks = this;
+        this.earlierBreaks = inherited;
         this.brokenKeys = Arrays.copyOf(move.breaks, move.breakCount);
         List<Location> locations = new ArrayList<>(move.breakCount);
         for (long key : brokenKeys) {
@@ -83,10 +95,26 @@ public final class PathNode {
         this.blocksToBreak = Collections.unmodifiableList(locations);
     }
 
+    /** Whether the block was broken on the way to this node. */
     boolean isBroken(long key) {
-        for (long broken : brokenKeys) {
-            if (broken == key) {
-                return true;
+        for (PathNode node = breaks; node != null; node = node.earlierBreaks) {
+            for (long broken : node.brokenKeys) {
+                if (broken == key) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether a block broken on the way here is in the column at (x, z) between {@code minY} and {@code maxY}. */
+    boolean hasBrokenNear(int x, int z, int minY, int maxY) {
+        for (PathNode node = breaks; node != null; node = node.earlierBreaks) {
+            for (long broken : node.brokenKeys) {
+                int y = BlockKey.y(broken);
+                if (BlockKey.x(broken) == x && BlockKey.z(broken) == z && y >= minY && y <= maxY) {
+                    return true;
+                }
             }
         }
         return false;
