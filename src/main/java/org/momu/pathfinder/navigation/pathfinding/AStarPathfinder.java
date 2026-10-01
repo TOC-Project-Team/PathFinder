@@ -23,8 +23,8 @@ import static org.momu.pathfinder.navigation.pathfinding.PlayerBody.*;
  * <ul>
  *     <li>walking to the 8 neighbors, stepping up ledges up to {@link PlayerBody#STEP_HEIGHT}, jumping up to
  *     {@link PlayerBody#JUMP_HEIGHT} and dropping down, see {@link #sweep}</li>
- *     <li>climbing ladders, vines and scaffolding, swimming up and down, and climbing or digging down,
- *     see {@link #climbUp} and {@link #descend}</li>
+ *     <li>climbing ladders, vines and scaffolding (also jumping up to grab one), swimming up and down, and
+ *     climbing or digging down, see {@link #climbUp} and {@link #descend}</li>
  *     <li>jumping across gaps to blocks at other heights, in any direction, see {@link #gapJumps}</li>
  * </ul>
  * Moves that need a block broken are only tried when walking and jumping cannot get past, and cost
@@ -36,10 +36,10 @@ import static org.momu.pathfinder.navigation.pathfinding.PlayerBody.*;
 public final class AStarPathfinder {
     /** Largest gap (in blocks between the two blocks' edges) a sprint jump clears on flat ground. */
     private static final double MAX_FLAT_GAP = 3.0;
-    /** Largest gap when landing up to half a block higher. */
-    private static final double MAX_HALF_UP_GAP = 2.5;
-    /** Largest gap when landing a full block higher. */
-    private static final double MAX_FULL_UP_GAP = 2.0;
+    /** Largest gap when landing higher or lower than the take-off: a jump of at most 3 blocks. */
+    private static final double MAX_HEIGHT_CHANGE_GAP = 2.0;
+    /** Height differences up to this (carpets, snow layers) still count as a flat jump. */
+    private static final double FLAT_JUMP_TOLERANCE = 0.25;
     private static final int MAX_JUMP_REACH = 5;
     private static final int SWEEP_SAMPLES = 4;
     /** Extra blocks scanned below the safe fall height to find water, slime or a ladder to land in. */
@@ -167,8 +167,12 @@ public final class AStarPathfinder {
             relax(current, cost, dx, dz);
         }
 
-        if ((current.kind & (Stand.CLIMB | Stand.SWIM)) != 0 && climbUp(current)) {
-            relax(current, PathfinderConfig.STRAIGHT_COST + PathfinderConfig.VERTICAL_COST, 0, 0);
+        if (climbUp(current)) {
+            double cost = PathfinderConfig.STRAIGHT_COST + PathfinderConfig.VERTICAL_COST;
+            if ((current.kind & (Stand.CLIMB | Stand.SWIM)) == 0) {
+                cost += PathfinderConfig.JUMP_COST;
+            }
+            relax(current, cost, 0, 0);
         }
 
         if (descend(current)) {
@@ -593,14 +597,26 @@ public final class AStarPathfinder {
     // Climbing, swimming and digging in the same column
     // ---------------------------------------------------------------------------------------------------------
 
-    /** Climbing a ladder, vine or scaffolding, swimming up, or stepping out on top of scaffolding. */
+    /**
+     * Climbing a ladder, vine or scaffolding, swimming up, stepping out on top of scaffolding or onto the top of
+     * a ladder, or jumping up from the ground to grab a ladder or vine that starts above the player's feet.
+     */
     private boolean climbUp(PathNode from) {
         move.reset();
+        boolean holding = (from.kind & (Stand.CLIMB | Stand.SWIM)) != 0;
+        boolean canJump = (from.kind & Stand.GROUND) != 0 && (from.floorFlags & BlockTypes.NO_JUMP) == 0;
+        if (!holding && !canJump) {
+            return move.failed();
+        }
         int x = from.x, y = from.y + 1, z = from.z;
         while (true) {
             Stand stand = terrain.stand(x, y, z, from, move);
             if (stand.valid) {
                 if (stand.feet <= from.feetY + EPS) {
+                    return move.failed();
+                }
+                // From the ground, a jump only gets the feet into a climbable block, it is not a free ride up.
+                if (!holding && (!stand.is(Stand.CLIMB) || stand.feet - from.feetY > JUMP_HEIGHT + EPS)) {
                     return move.failed();
                 }
                 return move.land(x, y, z, stand, MoveType.UP, 0.0);
@@ -731,7 +747,7 @@ public final class AStarPathfinder {
                     continue;
                 }
                 double gap = Math.hypot(Math.max(0, Math.abs(dx) - 1), Math.max(0, Math.abs(dz) - 1));
-                if (gap > MAX_FLAT_GAP + EPS || gapIsDeadly(current, dx, dz, steps)) {
+                if (gap > MAX_FLAT_GAP + EPS) {
                     continue;
                 }
                 int tx = current.x + dx, tz = current.z + dz;
@@ -741,8 +757,7 @@ public final class AStarPathfinder {
                         continue;
                     }
                     double rise = stand.feet - current.feetY;
-                    double maxGap = rise > STEP_HEIGHT + EPS ? MAX_FULL_UP_GAP
-                            : rise > EPS ? MAX_HALF_UP_GAP : MAX_FLAT_GAP;
+                    double maxGap = Math.abs(rise) > FLAT_JUMP_TOLERANCE ? MAX_HEIGHT_CHANGE_GAP : MAX_FLAT_GAP;
                     if (rise > 1.0 + EPS || gap > maxGap + EPS) {
                         continue;
                     }
@@ -769,25 +784,6 @@ public final class AStarPathfinder {
             if (stand.valid && stand.is(Stand.GROUND) && !stand.is(Stand.SWIM)
                     && Math.abs(stand.feet - from.feetY) <= STEP_HEIGHT + EPS) {
                 return true;
-            }
-        }
-        return false;
-    }
-
-    /** Never suggest a jump across lava, fire or other hazards: a missed jump would be fatal. */
-    private boolean gapIsDeadly(PathNode from, int dx, int dz, int steps) {
-        int depth = Math.max(0, PathfinderConfig.MAX_SAFE_FALL_HEIGHT) + 2;
-        for (int step = 1; step < steps; step++) {
-            int x = from.x + (int) Math.floor(dx * (double) step / steps + 0.5);
-            int z = from.z + (int) Math.floor(dz * (double) step / steps + 0.5);
-            for (int y = from.y + 1; y >= from.y - depth; y--) {
-                TerrainCell c = terrain.cell(x, y, z);
-                if (c.has(BlockTypes.LAVA | BlockTypes.BODY_HAZARD | BlockTypes.FLOOR_HAZARD)) {
-                    return true;
-                }
-                if (y < from.y && c.boxes.length > 0) {
-                    break;
-                }
             }
         }
         return false;

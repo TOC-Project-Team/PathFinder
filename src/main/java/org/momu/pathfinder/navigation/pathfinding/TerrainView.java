@@ -160,6 +160,19 @@ final class TerrainView {
             floorFlags = feet.flags;
         }
 
+        if (support == Double.NEGATIVE_INFINITY && below.has(BlockTypes.LADDER) && !feet.has(BlockTypes.CLIMBABLE)) {
+            // A ladder's plate sits at the edge of its block, but the player can stand on its top edge and jump
+            // from there. Vines have no collision, so this does not apply to them.
+            double[] boxes = below.boxes;
+            for (int k = 0; k < boxes.length; k += 6) {
+                double top = y - 1 + boxes[k + 4];
+                if (top >= y - EPS && top < y + 1 - EPS && top > support) {
+                    support = top;
+                    floorFlags = below.flags;
+                }
+            }
+        }
+
         int kind = 0;
         double feetY = y;
         if (support > Double.NEGATIVE_INFINITY) {
