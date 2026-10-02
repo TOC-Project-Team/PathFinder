@@ -1,7 +1,6 @@
 package org.momu.pathfinder.navigation.pathfinding;
 
 import org.bukkit.Location;
-import org.bukkit.block.Block;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -165,13 +164,15 @@ public final class PathNode {
         return nearBanner;
     }
 
-    void updateDisplayFlags() {
-        Block feet = location.getBlock();
-        Block below = feet.getRelative(0, -1, 0);
-        Block above = feet.getRelative(0, 1, 0);
-        nearFenceGate = BlockTypes.isFenceGate(feet) || BlockTypes.isFenceGate(below) || BlockTypes.isFenceGate(above);
-        nearDoor = BlockTypes.isAnyDoor(feet) || BlockTypes.isAnyDoor(below) || BlockTypes.isAnyDoor(above);
-        nearBanner = BlockTypes.isBanner(feet) || BlockTypes.isBanner(below) || BlockTypes.isBanner(above);
+    void updateDisplayFlags(TerrainView terrain) {
+        TerrainCell feet = terrain.cell(x, y, z);
+        TerrainCell below = terrain.cell(x, y - 1, z);
+        TerrainCell above = terrain.cell(x, y + 1, z);
+        nearFenceGate = feet.has(BlockTypes.FENCE_GATE) || below.has(BlockTypes.FENCE_GATE)
+                || above.has(BlockTypes.FENCE_GATE);
+        int door = BlockTypes.DOOR | BlockTypes.TRAPDOOR;
+        nearDoor = feet.has(door) || below.has(door) || above.has(door);
+        nearBanner = feet.has(BlockTypes.BANNER) || below.has(BlockTypes.BANNER) || above.has(BlockTypes.BANNER);
     }
 
     /** Open-set order: lowest f first, then highest g, then position for determinism. */

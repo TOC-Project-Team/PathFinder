@@ -12,6 +12,8 @@
 
 **PathFinder** is a Paper/Spigot plugin focused on navigation and waypoint workflows for Minecraft servers. It uses Java-based path guidance, asynchronous runtime tasks, and player-visible particle routes to guide users toward targets without blocking the main server thread.
 
+PathFinder also runs on **Folia**: every task is scheduled on the region that owns the player or chunk, and path searches read copies of the chunks so they can stay off the region threads.
+
 Key points:
 
 - Asynchronous path processing designed to avoid main-thread lag.

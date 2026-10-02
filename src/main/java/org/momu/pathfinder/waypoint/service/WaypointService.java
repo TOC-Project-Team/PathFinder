@@ -3,6 +3,7 @@ package org.momu.pathfinder.waypoint.service;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
+import org.momu.pathfinder.navigation.runtime.Scheduling;
 import org.momu.pathfinder.waypoint.model.Waypoint;
 
 import java.io.File;
@@ -125,7 +126,7 @@ public class WaypointService {
         if (plugin == null || storage == null) return;
         WaypointStorage target = storage;
         List<WaypointStorage.Snapshot> snapshot = waypoints.values().stream().map(WaypointStorage.Snapshot::of).toList();
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+        Scheduling.runAsync(() -> {
             try {
                 target.save(snapshot);
             } catch (IOException e) {

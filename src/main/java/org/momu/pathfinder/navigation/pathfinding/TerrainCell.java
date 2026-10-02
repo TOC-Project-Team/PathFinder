@@ -1,6 +1,10 @@
 package org.momu.pathfinder.navigation.pathfinding;
 
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Waterlogged;
 import org.bukkit.util.BoundingBox;
 
 import java.util.Collection;
@@ -43,30 +47,61 @@ final class TerrainCell {
         return new TerrainCell(flags, boxes, water);
     }
 
+    /**
+     * The same as {@link #of(Block)} for a block copied out of the world (see {@link TerrainSnapshot}); {@code at}
+     * is where it is, which offsets the shapes of blocks such as bamboo.
+     */
+    static TerrainCell of(Material type, BlockData data, Location at) {
+        int flags = BlockTypes.flags(type);
+        if ((flags & BlockTypes.AIR) != 0) {
+            return AIR;
+        }
+        boolean water = (flags & BlockTypes.WATER) != 0 || (data instanceof Waterlogged w && w.isWaterlogged());
+        double[] boxes;
+        if ((flags & BlockTypes.PLATFORM) != 0) {
+            boxes = FULL_BOX;
+        } else {
+            try {
+                boxes = toArray(data.getCollisionShape(at).getBoundingBoxes());
+            } catch (Throwable ignored) {
+                boxes = type.isCollidable() ? FULL_BOX : NO_BOXES;
+            }
+        }
+        return new TerrainCell(flags, boxes, water);
+    }
+
     private static double[] collisionBoxes(Block block) {
         try {
-            Collection<BoundingBox> shape = block.getCollisionShape().getBoundingBoxes();
-            if (shape.isEmpty()) {
-                return NO_BOXES;
-            }
-            double[] boxes = new double[shape.size() * 6];
-            int i = 0;
-            for (BoundingBox box : shape) {
-                boxes[i++] = box.getMinX();
-                boxes[i++] = box.getMinY();
-                boxes[i++] = box.getMinZ();
-                boxes[i++] = box.getMaxX();
-                boxes[i++] = box.getMaxY();
-                boxes[i++] = box.getMaxZ();
-            }
-            return boxes;
+            return toArray(block.getCollisionShape().getBoundingBoxes());
         } catch (Throwable ignored) {
             return block.isPassable() ? NO_BOXES : FULL_BOX;
         }
     }
 
+    private static double[] toArray(Collection<BoundingBox> shape) {
+        if (shape.isEmpty()) {
+            return NO_BOXES;
+        }
+        double[] boxes = new double[shape.size() * 6];
+        int i = 0;
+        for (BoundingBox box : shape) {
+            boxes[i++] = box.getMinX();
+            boxes[i++] = box.getMinY();
+            boxes[i++] = box.getMinZ();
+            boxes[i++] = box.getMaxX();
+            boxes[i++] = box.getMaxY();
+            boxes[i++] = box.getMaxZ();
+        }
+        return boxes;
+    }
+
     boolean has(int flag) {
         return (flags & flag) != 0;
+    }
+
+    /** Like {@link Block#isPassable()}: nothing to bump into. */
+    boolean isPassable() {
+        return boxes.length == 0;
     }
 
     /**

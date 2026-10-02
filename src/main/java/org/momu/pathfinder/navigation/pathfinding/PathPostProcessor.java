@@ -1,7 +1,6 @@
 package org.momu.pathfinder.navigation.pathfinding;
 
 import org.bukkit.Location;
-import org.bukkit.block.Block;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -20,15 +19,15 @@ final class PathPostProcessor {
     private PathPostProcessor() {
     }
 
-    static List<PathNode> buildPath(PathNode goal) {
+    static List<PathNode> buildPath(PathNode goal, TerrainView terrain) {
         List<PathNode> path = new ArrayList<>();
         for (PathNode node = goal; node != null; node = node.parent) {
             path.add(node);
         }
         Collections.reverse(path);
-        path = mergeWaterSurfaceRuns(path);
+        path = mergeWaterSurfaceRuns(path, terrain);
         for (PathNode node : path) {
-            node.updateDisplayFlags();
+            node.updateDisplayFlags(terrain);
         }
         return path;
     }
@@ -37,7 +36,7 @@ final class PathPostProcessor {
      * Where the path swims along the water surface, skips intermediate nodes that have a clear straight line
      * between them.
      */
-    private static List<PathNode> mergeWaterSurfaceRuns(List<PathNode> path) {
+    private static List<PathNode> mergeWaterSurfaceRuns(List<PathNode> path, TerrainView terrain) {
         if (path.size() < 3) {
             return path;
         }
@@ -49,16 +48,16 @@ final class PathPostProcessor {
             PathNode current = path.get(index);
             int nextIndex = index + 1;
 
-            if (isTraversableWaterSurface(current.location)) {
+            if (isTraversableWaterSurface(terrain, current.x, current.y, current.z)) {
                 int farthest = index;
                 int surfaceY = current.location.getBlockY();
                 for (int candidate = index + 1; candidate < path.size(); candidate++) {
                     PathNode candidateNode = path.get(candidate);
                     if (candidateNode.location.getBlockY() != surfaceY
-                            || !isTraversableWaterSurface(candidateNode.location)) {
+                            || !isTraversableWaterSurface(terrain, candidateNode.x, candidateNode.y, candidateNode.z)) {
                         break;
                     }
-                    if (hasStraightSwim(current.location, candidateNode.location)) {
+                    if (hasStraightSwim(terrain, current.location, candidateNode.location)) {
                         farthest = candidate;
                     }
                 }
@@ -75,7 +74,7 @@ final class PathPostProcessor {
     }
 
     /** Samples the straight line between two surface spots every quarter block. */
-    private static boolean hasStraightSwim(Location start, Location end) {
+    private static boolean hasStraightSwim(TerrainView terrain, Location start, Location end) {
         if (start.getWorld() == null || start.getWorld() != end.getWorld()
                 || start.getBlockY() != end.getBlockY()) {
             return false;
@@ -88,9 +87,9 @@ final class PathPostProcessor {
 
         for (int sample = 0; sample <= samples; sample++) {
             double ratio = (double) sample / samples;
-            Location point = new Location(start.getWorld(), startX + deltaX * ratio, start.getBlockY(),
-                    startZ + deltaZ * ratio);
-            if (!isTraversableWaterSurface(point)) {
+            int pointX = (int) Math.floor(startX + deltaX * ratio);
+            int pointZ = (int) Math.floor(startZ + deltaZ * ratio);
+            if (!isTraversableWaterSurface(terrain, pointX, start.getBlockY(), pointZ)) {
                 return false;
             }
         }
@@ -98,17 +97,17 @@ final class PathPostProcessor {
     }
 
     /** A spot where the player can swim along the surface with their head above water. */
-    private static boolean isTraversableWaterSurface(Location location) {
-        Block feet = location.getBlock();
-        Block head = feet.getRelative(0, 1, 0);
-        Block below = feet.getRelative(0, -1, 0);
+    private static boolean isTraversableWaterSurface(TerrainView terrain, int x, int y, int z) {
+        TerrainCell feet = terrain.cell(x, y, z);
+        TerrainCell head = terrain.cell(x, y + 1, z);
+        TerrainCell below = terrain.cell(x, y - 1, z);
 
-        boolean feetWater = BlockTypes.isWater(feet);
-        boolean headWater = BlockTypes.isWater(head);
-        boolean belowWater = BlockTypes.isWater(below);
+        boolean feetWater = feet.water;
+        boolean headWater = head.water;
+        boolean belowWater = below.water;
 
-        boolean feetOpen = feetWater || (feet.isPassable() && !BlockTypes.has(feet, BlockTypes.BODY_HAZARD));
-        boolean headOpen = !headWater && head.isPassable() && !BlockTypes.has(head, BlockTypes.BODY_HAZARD);
+        boolean feetOpen = feetWater || (feet.isPassable() && !feet.has(BlockTypes.BODY_HAZARD));
+        boolean headOpen = !headWater && head.isPassable() && !head.has(BlockTypes.BODY_HAZARD);
         return feetOpen && headOpen && ((!feetWater && belowWater) || (feetWater && !headWater));
     }
 }

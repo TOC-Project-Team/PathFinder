@@ -8,6 +8,7 @@ import org.momu.pathfinder.config.PathfinderConfig;
 import org.momu.pathfinder.navigation.pathfinding.BlockTypes;
 import org.momu.pathfinder.navigation.pathfinding.MoveType;
 import org.momu.pathfinder.navigation.pathfinding.PathNode;
+import org.momu.pathfinder.navigation.runtime.Scheduling;
 
 import java.util.HashSet;
 import java.util.List;
@@ -103,6 +104,9 @@ public final class PathRenderer {
 
     /** Highlights the block the player has to climb or open at this step. */
     private static void outlineInteractiveBlocks(Player player, PathNode node) {
+        if (!Scheduling.isLoaded(node.getLocation())) {
+            return;
+        }
         Block block = node.getLocation().getBlock();
         if (BlockTypes.isScaffolding(block)) {
             outlineColumn(player, node, Color.ORANGE, BlockTypes::isScaffolding, false);

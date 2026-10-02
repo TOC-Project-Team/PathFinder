@@ -329,7 +329,7 @@ final class PlayerNavigationMenu implements Menu {
         }
         player.sendMessage(ChatColor.YELLOW + Messages.get(player, "messages.stronghold-searching"));
         long startTime = System.currentTimeMillis();
-        Scheduling.runSync(() -> {
+        Scheduling.runFor(player, () -> {
             Location stronghold = StrongholdLocator.locateNearest(player, STRONGHOLD_SEARCH_RADIUS);
             double seconds = (System.currentTimeMillis() - startTime) / 1000.0;
             if (stronghold == null) {

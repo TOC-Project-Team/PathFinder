@@ -4,19 +4,20 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Opens PathFinder's menus and routes clicks back to them. Open menu inventories are tracked so clicks in
- * them can be recognized and cancelled.
+ * them can be recognized and cancelled. On Folia each player's menus are handled on that player's region
+ * thread, so the maps are shared between threads.
  */
 public final class MenuManager {
     private static final MenuManager INSTANCE = new MenuManager();
 
-    private final Map<Inventory, Menu> openMenus = new HashMap<>();
-    private final Map<UUID, Integer> navigationMenuPages = new HashMap<>();
+    private final Map<Inventory, Menu> openMenus = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> navigationMenuPages = new ConcurrentHashMap<>();
     private final AdminMenu adminMenu = new AdminMenu(this);
     private final PlayerNavigationMenu navigationMenu = new PlayerNavigationMenu(this);
 

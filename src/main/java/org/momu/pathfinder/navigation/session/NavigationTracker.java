@@ -13,11 +13,10 @@ import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 import org.momu.pathfinder.bootstrap.PathFinderPlugin;
 import org.momu.pathfinder.navigation.runtime.NavigationTasks;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Source of truth for who is navigating where, plus the location-privacy and server-wide on/off settings.
@@ -26,12 +25,15 @@ import java.util.UUID;
  * replaces any navigation the player already had. Stopping fires {@link PathFinderNavigationStopEvent} and
  * cancels the player's guidance task. This class only tracks state; {@code NavigationService} starts the
  * guidance itself.
+ *
+ * <p>Safe to use from any thread: on Folia, commands, menus, events and guidance tasks run on the threads of
+ * different regions, and a navigation can be stopped from a region other than the navigator's.
  */
 public final class NavigationTracker {
     private static final NavigationTracker INSTANCE = new NavigationTracker();
 
-    private final Map<UUID, ActiveNavigation> active = new HashMap<>();
-    private final Set<UUID> actionBarSuppressed = new HashSet<>();
+    private final Map<UUID, ActiveNavigation> active = new ConcurrentHashMap<>();
+    private final Set<UUID> actionBarSuppressed = ConcurrentHashMap.newKeySet();
     private final NavigationPreferences preferences = new NavigationPreferences();
 
     private NavigationTracker() {
@@ -137,8 +139,9 @@ public final class NavigationTracker {
     }
 
     public void stopNavigation(UUID playerId, StopReason reason) {
-        NavigationSession endedSession = getSession(playerId);
+        // Removing first means that when two threads stop the same navigation, only one fires the event.
         ActiveNavigation ended = active.remove(playerId);
+        NavigationSession endedSession = toSession(playerId, ended);
         actionBarSuppressed.remove(playerId);
 
         Player navigator = Bukkit.getPlayer(playerId);
@@ -194,7 +197,10 @@ public final class NavigationTracker {
 
     /** Builds an API snapshot of the player's current navigation, or {@code null} if they are not navigating. */
     public NavigationSession getSession(UUID playerId) {
-        ActiveNavigation navigation = playerId == null ? null : active.get(playerId);
+        return playerId == null ? null : toSession(playerId, active.get(playerId));
+    }
+
+    private static NavigationSession toSession(UUID playerId, ActiveNavigation navigation) {
         if (navigation == null) {
             return null;
         }
@@ -233,6 +239,14 @@ public final class NavigationTracker {
 
     public boolean canBypassRestrictions(UUID playerId) {
         return PathFinderPlugin.getInstance().canBypassNavigationRestrictions(playerId);
+    }
+
+    /**
+     * Whether the player is dead. On Folia a player who is being moved to another region (teleport, portal) also
+     * reads as dead for a moment, so the health has to be gone too.
+     */
+    public static boolean isDead(Player player) {
+        return player.isDead() && player.getHealth() <= 0.0;
     }
 
     /** Whether {@code target} is invisible and the config forbids navigating to invisible players. */

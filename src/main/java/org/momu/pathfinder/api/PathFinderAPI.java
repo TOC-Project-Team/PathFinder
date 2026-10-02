@@ -13,7 +13,10 @@ import java.util.UUID;
  * Public API for other plugins to control PathFinder.
  * <p>
  * Obtain an instance with {@link PathFinderProvider#get()} or through Bukkit's
- * {@link org.bukkit.plugin.ServicesManager}. All methods must be called from the main server thread.
+ * {@link org.bukkit.plugin.ServicesManager}. On Paper, call all methods from the main server thread. On Folia,
+ * call them from a server thread: preferably the one that owns the navigating player (e.g. their
+ * {@link org.bukkit.entity.Entity#getScheduler() entity scheduler} or an event about them), or the global region
+ * thread. PathFinder schedules its own work on the player's thread.
  * <p>
  * Navigation lifecycle can be observed with the events in {@link org.momu.pathfinder.api.event}.
  */

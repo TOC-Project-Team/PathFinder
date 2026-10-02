@@ -10,6 +10,12 @@ import org.momu.pathfinder.api.NavigationSession;
  * <p>
  * Events are fired on the main thread in almost all cases. When PathFinder has to end a navigation from its
  * asynchronous path worker, the event is fired asynchronously ({@link #isAsynchronous()} returns {@code true}).
+ * <p>
+ * On Folia, events are fired on the thread that started, ended or arrived at the navigation: usually the
+ * thread of the region that owns the navigating player, but a command from the console or another player, a
+ * target player's death, or an API call can fire them on another region or the global region thread. Use the
+ * player's {@link org.bukkit.entity.Entity#getScheduler() entity scheduler} to act on the player from a
+ * listener.
  */
 public abstract class PathFinderNavigationEvent extends Event {
     private final Player player;
