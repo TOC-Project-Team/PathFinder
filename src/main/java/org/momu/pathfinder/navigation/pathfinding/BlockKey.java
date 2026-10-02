@@ -19,6 +19,18 @@ final class BlockKey {
                 | (long) y & 0xFFFL;
     }
 
+    static int x(long key) {
+        return (int) (key >> 38);
+    }
+
+    static int z(long key) {
+        return (int) ((key << 26) >> 38);
+    }
+
+    static int y(long key) {
+        return (int) ((key << 52) >> 52);
+    }
+
     /** Spreads the key's bits so that neighboring blocks land in different hash buckets. */
     static int hash(long key) {
         key ^= key >>> 33;

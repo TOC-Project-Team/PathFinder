@@ -18,7 +18,7 @@ import java.util.function.Predicate;
  * Draws a path as dust particles for the navigating player:
  * <ul>
  *     <li>blocks that must be broken are outlined in red,</li>
- *     <li>ladders, doors, fence gates and trapdoors are outlined in green, scaffolding in orange,</li>
+ *     <li>ladders, vines, doors, fence gates and trapdoors are outlined in green, scaffolding in orange,</li>
  *     <li>segments are lines colored by how the player moves (white walk, yellow step up, purple drop,
  *     aqua climb or jump arc),</li>
  *     <li>the end of the drawn part gets a large white dot.</li>
@@ -41,16 +41,13 @@ public final class PathRenderer {
 
         for (int i = 0; i < drawCount - 1; i++) {
             PathNode current = path.get(i);
-            if (current.getMoveType() == MoveType.BLOCK_JUMP) {
-                int landing = i + 1;
-                while (landing < drawCount - 1 && path.get(landing).getMoveType() == MoveType.BLOCK_JUMP) {
-                    landing++;
-                }
-                ParticleShapes.jumpArc(player, center(current), center(path.get(landing)), Color.AQUA);
-                i = landing - 1;
+            PathNode next = path.get(i + 1);
+            if (next.getMoveType() == MoveType.BLOCK_JUMP) {
+                // Each gap jump is its own arc from take-off to landing.
+                ParticleShapes.jumpArc(player, center(current), center(next), Color.AQUA);
                 continue;
             }
-            drawStep(player, current, path.get(i + 1));
+            drawStep(player, current, next);
         }
 
         ParticleShapes.dot(player, center(path.get(path.size() - 1)), Color.WHITE, END_DOT_SIZE);
@@ -107,10 +104,11 @@ public final class PathRenderer {
     /** Highlights the block the player has to climb or open at this step. */
     private static void outlineInteractiveBlocks(Player player, PathNode node) {
         Block block = node.getLocation().getBlock();
-        if (BlockTypes.isLadder(block)) {
-            outlineColumn(player, node, Color.GREEN, BlockTypes::isLadder, false);
-        } else if (BlockTypes.isScaffolding(block)) {
+        if (BlockTypes.isScaffolding(block)) {
             outlineColumn(player, node, Color.ORANGE, BlockTypes::isScaffolding, false);
+        } else if (BlockTypes.isClimbable(block)) {
+            outlineColumn(player, node, Color.GREEN,
+                    other -> BlockTypes.isClimbable(other) && !BlockTypes.isScaffolding(other), false);
         } else if (BlockTypes.isTrapdoor(block)) {
             ParticleShapes.blockOutline(player, node.getLocation().clone(), Color.GREEN, OUTLINE_SPACING);
         } else if (node.isNearFenceGate()) {

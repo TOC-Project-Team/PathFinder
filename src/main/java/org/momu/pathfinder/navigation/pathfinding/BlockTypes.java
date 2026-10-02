@@ -1,209 +1,260 @@
 package org.momu.pathfinder.navigation.pathfinding;
 
 import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.type.Slab;
+import org.bukkit.block.data.Waterlogged;
 
-import java.util.EnumSet;
-import java.util.Set;
-import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
- * Classifies blocks for movement. Most groups are matched by material name so that every wood type, color
- * and future variant is covered automatically.
+ * Classifies materials for movement. Shape questions (how tall a block is, whether it can be walked through) are
+ * answered from the block's collision shape by {@link TerrainView}; this class only covers what a shape cannot
+ * tell: climbing, water, doors the player can open, hazards and fall damage.
+ *
+ * <p>Classes are looked up from Minecraft's block tags where one exists, with a name-based fallback, so every
+ * wood type, color and future variant is covered automatically.</p>
  */
 public final class BlockTypes {
-    /** Blocks the player must never walk through. */
-    static final Set<Material> OBSTACLES = EnumSet.of(Material.CACTUS, Material.COBWEB, Material.SWEET_BERRY_BUSH,
-            Material.VINE, Material.POWDER_SNOW, Material.POINTED_DRIPSTONE);
+    static final int AIR = 1 << 1;
+    static final int WATER = 1 << 2;
+    static final int LAVA = 1 << 3;
+    static final int CLIMBABLE = 1 << 4;
+    /** Scaffolding: solid when standing on top of it, walk-through and climbable from inside. */
+    static final int PLATFORM = 1 << 5;
+    /** Doors, trapdoors and fence gates the player can open by hand. */
+    static final int OPENABLE = 1 << 6;
+    static final int DOOR = 1 << 7;
+    static final int TRAPDOOR = 1 << 8;
+    static final int FENCE_GATE = 1 << 9;
+    /** Hurts, traps or teleports the player when the body is inside it. */
+    static final int BODY_HAZARD = 1 << 10;
+    /** Hurts or drops the player when stood on. */
+    static final int FLOOR_HAZARD = 1 << 11;
+    static final int NO_JUMP = 1 << 12;
+    static final int SLOW = 1 << 13;
+    static final int UNBREAKABLE = 1 << 14;
+    static final int NO_FALL_DAMAGE = 1 << 15;
+    static final int FALL_DAMAGE_20 = 1 << 16;
+    static final int FALL_DAMAGE_50 = 1 << 17;
+    static final int LADDER = 1 << 18;
+    static final int BANNER = 1 << 19;
+    /** Iron doors and iron trapdoors: they only open with redstone. */
+    static final int IRON_DOOR = 1 << 20;
+    /** Buttons, levers and pressure plates, which the player can use to open an iron door. */
+    static final int ACTIVATOR = 1 << 21;
+    /** Activators that only power for a moment (buttons and pressure plates, not levers). */
+    static final int MOMENTARY = 1 << 22;
+    static final int PRESSURE_PLATE = 1 << 23;
+    /** Full blocks that do not pass redstone power on (glass, leaves, ice, pistons...). */
+    static final int NOT_CONDUCTOR = 1 << 24;
+    private static final int KNOWN = 1;
 
-    /** Every material whose name contains "DOOR", which includes trapdoors. */
-    private static final Set<Material> ANY_DOORS = byName(name -> name.contains("DOOR"));
-    private static final Set<Material> TRAPDOORS = byName(name -> name.contains("TRAPDOOR"));
-    private static final Set<Material> IRON_TRAPDOORS = byName(name -> name.contains("IRON_TRAPDOOR"));
-    private static final Set<Material> BANNERS = byName(name -> name.contains("BANNER"));
-    private static final Set<Material> LADDERS = byName(name -> name.contains("LADDER"));
-    private static final Set<Material> SCAFFOLDING = byName(name -> name.contains("SCAFFOLDING"));
-    private static final Set<Material> FENCES = byName(name -> name.contains("FENCE") && !name.contains("GATE"));
-    private static final Set<Material> FENCE_GATES = byName(name -> name.contains("FENCE_GATE"));
-    private static final Set<Material> CARPETS = byName(name -> name.contains("CARPET"));
-    private static final Set<Material> SLABS = byName(name -> name.contains("SLAB"));
-    private static final Set<Material> KELP = byName(name -> name.contains("KELP"));
-    /** Any material containing "WATER": water itself and waterlogged-style blocks such as water cauldrons. */
-    private static final Set<Material> WATER = byName(name -> name.contains("WATER"));
-    private static final Set<Material> LAVA = byName(name -> name.contains("LAVA"));
-    private static final Set<Material> LAVA_OR_FIRE = byName(name -> name.contains("LAVA") || name.contains("FIRE"));
-    /** Short blocks the player can step onto without jumping: slabs, lanterns, cakes and candles. */
-    private static final Set<Material> LOW_BLOCKS = byName(name -> name.contains("SLAB") || name.contains("LANTERN")
-            || name.contains("CAKE") || name.contains("CANDLE"));
-    private static final Set<Material> UNBREAKABLE = byName(name -> name.contains("BEDROCK") || name.contains("PORTAL")
-            || name.contains("SPAWNER") || name.contains("BARRIER") || name.contains("END_GATEWAY"));
-
-    private static final int[][] SLAB_STAIR_DIRECTIONS = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+    private static final int[] FLAGS = new int[Material.values().length];
+    /** 0 = unknown, 1 = cannot be waterlogged, 2 = can be waterlogged. */
+    private static final byte[] WATERLOGGABLE = new byte[Material.values().length];
 
     private BlockTypes() {
     }
 
-    private static Set<Material> byName(Predicate<String> predicate) {
-        Set<Material> materials = EnumSet.noneOf(Material.class);
-        for (Material material : Material.values()) {
-            if (predicate.test(material.name())) {
-                materials.add(material);
+    static int flags(Material material) {
+        int ordinal = material.ordinal();
+        int flags = FLAGS[ordinal];
+        if (flags == 0) {
+            flags = classify(material);
+            FLAGS[ordinal] = flags;
+        }
+        return flags;
+    }
+
+    static boolean has(Block block, int flag) {
+        return (flags(block.getType()) & flag) != 0;
+    }
+
+    private static int classify(Material material) {
+        String name = material.name();
+        int flags = KNOWN;
+        if (name.equals("AIR") || name.equals("CAVE_AIR") || name.equals("VOID_AIR")) {
+            return flags | AIR;
+        }
+
+        if (name.equals("WATER") || name.equals("BUBBLE_COLUMN") || name.equals("KELP")
+                || name.equals("KELP_PLANT") || name.equals("SEAGRASS") || name.equals("TALL_SEAGRASS")) {
+            flags |= WATER;
+        }
+        if (name.equals("LAVA") || name.equals("LAVA_CAULDRON")) {
+            flags |= LAVA | BODY_HAZARD | FLOOR_HAZARD;
+        }
+
+        if (isTagged(() -> Tag.CLIMBABLE, material) || name.equals("LADDER") || name.equals("VINE")
+                || name.endsWith("_VINES") || name.endsWith("_VINES_PLANT") || name.equals("SCAFFOLDING")) {
+            flags |= CLIMBABLE;
+        }
+        if (name.equals("LADDER")) {
+            flags |= LADDER;
+        }
+        if (name.equals("SCAFFOLDING")) {
+            flags |= PLATFORM;
+        }
+
+        boolean trapdoor = isTagged(() -> Tag.TRAPDOORS, material) || name.endsWith("TRAPDOOR");
+        boolean door = !trapdoor && (isTagged(() -> Tag.DOORS, material) || name.endsWith("_DOOR"));
+        boolean gate = isTagged(() -> Tag.FENCE_GATES, material) || name.endsWith("FENCE_GATE");
+        if (trapdoor) {
+            flags |= TRAPDOOR;
+        }
+        if (door) {
+            flags |= DOOR;
+        }
+        if (gate) {
+            flags |= FENCE_GATE;
+        }
+        if ((trapdoor || door || gate) && !name.startsWith("IRON_")) {
+            flags |= OPENABLE;
+        } else if (trapdoor || door) {
+            flags |= IRON_DOOR;
+        }
+        if (isTagged(() -> Tag.BUTTONS, material) || name.endsWith("_BUTTON")) {
+            flags |= ACTIVATOR | MOMENTARY;
+        }
+        if (isTagged(() -> Tag.PRESSURE_PLATES, material) || name.endsWith("PRESSURE_PLATE")) {
+            flags |= ACTIVATOR | MOMENTARY | PRESSURE_PLATE;
+        }
+        if (name.contains("GLASS") || name.contains("LEAVES") || name.equals("ICE") || name.contains("PISTON")
+                || name.equals("OBSERVER") || name.equals("REDSTONE_BLOCK") || name.equals("TARGET")) {
+            flags |= NOT_CONDUCTOR;
+        }
+        if (name.equals("LEVER")) {
+            flags |= ACTIVATOR;
+        }
+        if (name.contains("BANNER")) {
+            flags |= BANNER;
+        }
+
+        if (isTagged(() -> Tag.FIRE, material) || name.equals("FIRE") || name.equals("SOUL_FIRE")) {
+            flags |= BODY_HAZARD;
+        }
+        if (isTagged(() -> Tag.CAMPFIRES, material) || name.endsWith("CAMPFIRE")) {
+            flags |= BODY_HAZARD | FLOOR_HAZARD;
+        }
+        if (isTagged(() -> Tag.PORTALS, material) || name.equals("NETHER_PORTAL") || name.equals("END_PORTAL")
+                || name.equals("END_GATEWAY")) {
+            flags |= BODY_HAZARD;
+        }
+        switch (name) {
+            case "CACTUS" -> flags |= BODY_HAZARD | FLOOR_HAZARD;
+            case "SWEET_BERRY_BUSH", "WITHER_ROSE", "COBWEB", "POWDER_SNOW" -> flags |= BODY_HAZARD;
+            case "MAGMA_BLOCK", "POINTED_DRIPSTONE", "BIG_DRIPLEAF" -> flags |= FLOOR_HAZARD;
+            case "HONEY_BLOCK" -> flags |= NO_JUMP | SLOW | FALL_DAMAGE_20;
+            case "SOUL_SAND" -> flags |= SLOW;
+            case "SLIME_BLOCK" -> flags |= NO_FALL_DAMAGE;
+            case "HAY_BLOCK" -> flags |= FALL_DAMAGE_20;
+            default -> {
             }
         }
-        return materials;
+        if (isTagged(() -> Tag.BEDS, material) || name.endsWith("_BED")) {
+            flags |= FALL_DAMAGE_50;
+        }
+
+        float hardness;
+        try {
+            hardness = material.getHardness();
+        } catch (Throwable ignored) {
+            hardness = 1.0f;
+        }
+        if (hardness < 0 || hardness >= 50 || trapdoor || door || gate
+                || name.equals("BEDROCK") || name.equals("BARRIER") || name.equals("LIGHT")
+                || name.endsWith("SPAWNER") || name.equals("VAULT") || name.equals("END_PORTAL_FRAME")
+                || name.contains("COMMAND_BLOCK") || name.equals("STRUCTURE_BLOCK") || name.equals("JIGSAW")
+                || name.equals("REINFORCED_DEEPSLATE") || (flags & BODY_HAZARD) != 0) {
+            flags |= UNBREAKABLE;
+        }
+        return flags;
+    }
+
+    /** Tag lookups are deferred so a tag missing from a newer or older server cannot break classification. */
+    private static boolean isTagged(Supplier<Tag<Material>> tagSupplier, Material material) {
+        try {
+            Tag<Material> tag = tagSupplier.get();
+            return tag != null && tag.isTagged(material);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    static boolean isWaterlogged(Block block, Material type) {
+        int ordinal = type.ordinal();
+        if (WATERLOGGABLE[ordinal] == 1) {
+            return false;
+        }
+        BlockData data = block.getBlockData();
+        boolean waterloggable = data instanceof Waterlogged;
+        WATERLOGGABLE[ordinal] = waterloggable ? (byte) 2 : (byte) 1;
+        return waterloggable && ((Waterlogged) data).isWaterlogged();
+    }
+
+    /** Water, bubble columns, underwater plants and waterlogged blocks. */
+    public static boolean isWater(Block block) {
+        Material type = block.getType();
+        int flags = flags(type);
+        if ((flags & WATER) != 0) {
+            return true;
+        }
+        return (flags & AIR) == 0 && isWaterlogged(block, type);
     }
 
     /** Doors of any kind, <em>including trapdoors</em>. */
     public static boolean isAnyDoor(Block block) {
-        return ANY_DOORS.contains(block.getType());
+        return has(block, DOOR | TRAPDOOR);
     }
 
     public static boolean isTrapdoor(Block block) {
-        return TRAPDOORS.contains(block.getType());
+        return has(block, TRAPDOOR);
     }
 
     public static boolean isIronTrapdoor(Block block) {
-        return IRON_TRAPDOORS.contains(block.getType());
+        return has(block, TRAPDOOR) && !has(block, OPENABLE);
     }
 
     /** Trapdoors the player can open by hand (everything except iron trapdoors). */
     public static boolean isPassableTrapdoor(Block block) {
-        return isTrapdoor(block) && !isIronTrapdoor(block);
+        return has(block, TRAPDOOR) && has(block, OPENABLE);
     }
 
     public static boolean isBanner(Block block) {
-        return BANNERS.contains(block.getType());
+        return has(block, BANNER);
     }
 
     public static boolean isLadder(Block block) {
-        return LADDERS.contains(block.getType());
+        return has(block, LADDER);
+    }
+
+    /** Ladders, every kind of vine and scaffolding. */
+    public static boolean isClimbable(Block block) {
+        return has(block, CLIMBABLE);
     }
 
     public static boolean isScaffolding(Block block) {
-        return SCAFFOLDING.contains(block.getType());
-    }
-
-    public static boolean isFence(Block block) {
-        return FENCES.contains(block.getType());
+        return has(block, PLATFORM);
     }
 
     public static boolean isFenceGate(Block block) {
-        return FENCE_GATES.contains(block.getType());
-    }
-
-    public static boolean isCarpet(Block block) {
-        return CARPETS.contains(block.getType());
-    }
-
-    public static boolean isKelp(Block block) {
-        return KELP.contains(block.getType());
-    }
-
-    public static boolean isWater(Block block) {
-        return WATER.contains(block.getType());
+        return has(block, FENCE_GATE);
     }
 
     public static boolean isLava(Block block) {
-        return LAVA.contains(block.getType());
+        return has(block, LAVA);
     }
 
     /** Lava or anything burning (fire, soul fire, campfires). */
     public static boolean isLavaOrFire(Block block) {
-        return LAVA_OR_FIRE.contains(block.getType());
+        Material type = block.getType();
+        return (flags(type) & LAVA) != 0 || ((flags(type) & BODY_HAZARD) != 0 && type.name().contains("FIRE"));
     }
 
-    public static boolean isObstacle(Block block) {
-        return OBSTACLES.contains(block.getType());
-    }
-
-    public static boolean isUnbreakable(Block block) {
-        return UNBREAKABLE.contains(block.getType());
-    }
-
-    /** A fence with a carpet on top and room above it, which the player can walk over. */
-    public static boolean isJumpableFence(Block fence) {
-        if (!isFence(fence)) {
-            return false;
-        }
-        Block carpet = fence.getRelative(0, 1, 0);
-        return isCarpet(carpet) && carpet.getRelative(0, 1, 0).isPassable();
-    }
-
-    /** A single (non-double) slab. */
-    public static boolean isSlab(Block block) {
-        if (!SLABS.contains(block.getType())) {
-            return false;
-        }
-        try {
-            BlockData data = block.getBlockData();
-            if (data instanceof Slab slab) {
-                return slab.getType() != Slab.Type.DOUBLE;
-            }
-        } catch (Exception ignored) {
-            // Fall through: treat unreadable slab data as a single slab.
-        }
-        return true;
-    }
-
-    public static boolean isLowBlock(Block block) {
-        return LOW_BLOCKS.contains(block.getType()) && (!SLABS.contains(block.getType()) || isSlab(block));
-    }
-
-    /**
-     * A low block the player has to step onto. Slabs that form a staircase are excluded because they can be
-     * walked up like stairs.
-     */
-    public static boolean isLowBlockButNotStair(Block block) {
-        if (!isLowBlock(block)) {
-            return false;
-        }
-        return !(isSlab(block) && isSlabStair(block));
-    }
-
-    /** Whether this slab is part of a run of slabs that changes height, i.e. a slab staircase. */
-    private static boolean isSlabStair(Block slab) {
-        for (int[] direction : SLAB_STAIR_DIRECTIONS) {
-            if (isSlabStairInDirection(slab, direction[0], direction[1])) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isSlabStairInDirection(Block slab, int dirX, int dirZ) {
-        int slabCount = 0;
-        boolean heightChanges = false;
-
-        for (int step = 1; step <= 3; step++) {
-            Block ahead = slab.getRelative(dirX * step, 0, dirZ * step);
-            if (isSlab(ahead)) {
-                slabCount++;
-                continue;
-            }
-            if (isSlab(ahead.getRelative(0, 1, 0))) {
-                slabCount++;
-                heightChanges = true;
-                continue;
-            }
-            break;
-        }
-
-        for (int step = 1; step <= 3; step++) {
-            Block behind = slab.getRelative(-dirX * step, 0, -dirZ * step);
-            if (isSlab(behind)) {
-                slabCount++;
-                continue;
-            }
-            if (isSlab(behind.getRelative(0, -1, 0))) {
-                slabCount++;
-                heightChanges = true;
-                continue;
-            }
-            break;
-        }
-
-        return slabCount >= 2 && heightChanges;
+    /** Whether the block has a collision box, i.e. something to stand on or bump into. */
+    public static boolean hasCollision(Block block) {
+        return !has(block, AIR) && !block.isPassable();
     }
 }

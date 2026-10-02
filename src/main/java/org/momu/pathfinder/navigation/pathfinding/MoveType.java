@@ -4,17 +4,17 @@ package org.momu.pathfinder.navigation.pathfinding;
  * How the player gets from the previous path node to a node.
  */
 public enum MoveType {
-    /** Walking on the same level. */
+    /** Walking, including stepping onto slabs, carpets and stairs and down small drops. */
     HORIZONTAL,
-    /** Climbing straight up a ladder, scaffolding or water column. Rewritten to {@link #JUMP} in finished paths. */
+    /** Climbing up a ladder, vine or scaffolding, swimming up, or stepping out on top of scaffolding. */
     UP,
-    /** Stepping down. The search always refines this to {@link #FALL}. */
+    /** Climbing or swimming down, or sneaking down scaffolding. */
     DOWN,
-    /** Stepping up one block while moving sideways. */
+    /** Jumping (or climbing off a ladder or vine) onto a ledge while moving sideways. */
     JUMP,
-    /** Dropping down one or more blocks. */
+    /** Dropping down more than a step. */
     FALL,
-    /** Jumping across a gap of two or more blocks. */
+    /** Jumping across a gap to a block two or more blocks away, possibly at another height. */
     BLOCK_JUMP,
     /** Swimming in a straight line along the water surface. */
     WATER_SURFACE

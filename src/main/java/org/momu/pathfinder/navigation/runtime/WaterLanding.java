@@ -112,15 +112,14 @@ public final class WaterLanding {
         Block feet = location.getBlock();
         Block head = feet.getRelative(0, 1, 0);
         Block ground = feet.getRelative(0, -1, 0);
-        boolean groundHolds = ground.getType().isSolid() || BlockTypes.isLadder(ground)
-                || BlockTypes.isScaffolding(ground);
+        // isSolid() reports pressure plates and signs as solid, so check for an actual collision box.
+        boolean groundHolds = BlockTypes.hasCollision(ground) || BlockTypes.isScaffolding(ground);
         boolean dangerous = BlockTypes.isLavaOrFire(feet) || BlockTypes.isLavaOrFire(head)
                 || BlockTypes.isLavaOrFire(ground);
         return fitsPlayer(feet) && fitsPlayer(head) && groundHolds && !dangerous;
     }
 
     private static boolean fitsPlayer(Block block) {
-        return block.isPassable() || BlockTypes.isAnyDoor(block) || BlockTypes.isLadder(block)
-                || BlockTypes.isScaffolding(block);
+        return block.isPassable() || BlockTypes.isAnyDoor(block) || BlockTypes.isClimbable(block);
     }
 }

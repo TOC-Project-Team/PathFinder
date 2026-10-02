@@ -23,7 +23,7 @@ final class Airborne {
             return false;
         }
         Block feet = location.getBlock();
-        if (canStandOn(feet.getRelative(0, -1, 0))) {
+        if (canStandOn(feet) || canStandOn(feet.getRelative(0, -1, 0))) {
             return false;
         }
         for (int depth = 2; depth <= GROUND_SCAN_DEPTH; depth++) {
@@ -35,7 +35,7 @@ final class Airborne {
     }
 
     private static boolean canStandOn(Block block) {
-        return block.getType().isSolid() || BlockTypes.isWater(block) || BlockTypes.isLadder(block)
-                || BlockTypes.isScaffolding(block) || BlockTypes.isAnyDoor(block);
+        // isSolid() reports pressure plates and signs as solid, so check for an actual collision box.
+        return BlockTypes.hasCollision(block) || BlockTypes.isWater(block) || BlockTypes.isClimbable(block);
     }
 }

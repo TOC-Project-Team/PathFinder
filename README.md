@@ -135,8 +135,11 @@ Configuration changes are intended to be lightweight to maintain, and lower valu
 
 ### Notes
 
-- This plugin is better suited to general navigation than high-precision parkour routing.
-- Vertical path support is primarily designed around ladders and scaffolding.
+- Routes are planned from each block's real collision shape, so carpets, slabs, stairs, snow layers and similar low blocks are walked over, pressure plates, signs and banners are walked through, and fences and walls (1.5 blocks tall) are not jumped over. Blocks added in newer Minecraft versions work the same way without plugin changes.
+- Ladders, vines (including weeping, twisting and cave vines) and scaffolding are climbed, also when they start one block above the ground (the player jumps up to grab them). From the top of a ladder or vine, or standing on top of scaffolding, the route can continue onto a block up to one block higher. The player can also stand on the top edge of a ladder and jump from there, reaching a block two higher than the ladder; vines have no collision, so this does not work with them.
+- Simple parkour is supported: jumps between blocks at the same or different heights (up to one block higher), in any direction, when the arc is clear. `max_block_jump_distance` limits how far a jump reaches; gaps are further limited to what a sprint jump can clear (at most 4 blocks, i.e. a 3-block gap). From the top edge of a ladder the reach is shorter: 3 blocks to the same height or lower, 2 blocks to a block one higher. Jumps over lava are allowed as long as the player's body never touches it.
+- Wooden and copper doors, trapdoors and fence gates are treated as openable. Iron doors and trapdoors are passed when a button, lever or pressure plate on the side the player comes from really powers them (it touches the door, or is attached to a solid block touching the door; longer redstone circuits are not followed), or when they are already open and their panel is out of the way. An open iron door with only buttons or pressure plates on the far side is treated as closed, since it will shut again. The route never jumps inside an iron doorway. From inside a wooden door the route can use the door jump: shut the door on yourself and jump onto its top edge, then jump on from there (like the top of a ladder, the thin edge only allows jumps of 3 blocks level, 2 blocks one higher).
+- Breaking blocks is only suggested when walking, jumping and climbing cannot reach the target. Blocks the route breaks stay broken for the rest of the route, so it never relies on a block it told the player to break.
 - Underwater pathfinding can require additional testing depending on your map design.
 
 ---
@@ -161,7 +164,7 @@ This script:
 The main artifact produced by `./scripts/build-fatjar.sh` is written to:
 
 ```text
-.gradle-build/libs/PathFinder-1.8.0-all.jar
+.gradle-build/libs/PathFinder-1.9.0-all.jar
 ```
 
 The script resolves the final file from `.gradle-build/libs/*-all.jar`, so the exact filename follows the version declared in `build.gradle`.
@@ -252,7 +255,7 @@ Other plugins can control PathFinder through a Java API: start and stop navigati
    }
 
    dependencies {
-       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.8.0'
+       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.9.0'
    }
    ```
 
@@ -269,12 +272,12 @@ Other plugins can control PathFinder through a Java API: start and stop navigati
    <dependency>
        <groupId>com.github.TOC-Project-Team</groupId>
        <artifactId>PathFinder-source</artifactId>
-       <version>1.8.0</version>
+       <version>1.9.0</version>
        <scope>provided</scope>
    </dependency>
    ```
 
-   Alternatively, put the release jar in your project and use `compileOnly files('libs/PathFinder-1.8.0-all.jar')`.
+   Alternatively, put the release jar in your project and use `compileOnly files('libs/PathFinder-1.9.0-all.jar')`.
 
 3. Get the API instance:
 

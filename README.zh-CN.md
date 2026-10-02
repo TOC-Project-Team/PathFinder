@@ -135,8 +135,11 @@ path_refresh_ticks: 30
 
 ### 注意事项
 
-- 本插件适合日常导航，不适合高精度的跑酷路线。
-- 垂直方向的路线主要依靠梯子和脚手架。
+- 路线按照每个方块真实的碰撞箱规划：地毯、台阶、楼梯、雪层等矮方块可以直接走上去，压力板、告示牌、旗帜可以直接穿过，栅栏和墙（1.5 格高）不会被当作能跳上去的方块。新版本加入的方块同样适用，不需要更新插件。
+- 支持攀爬梯子、藤蔓（包括垂泪藤、缠怨藤和洞穴藤蔓）和脚手架，离地一格的梯子和藤蔓也可以跳上去抓住。爬到梯子或藤蔓顶端，或站在脚手架顶上时，可以继续走上最多高一格的方块。玩家还可以站在梯子顶部边缘起跳，跳上比梯子顶高两格的方块；藤蔓没有碰撞箱，所以不行。
+- 支持简单的跑酷：在跳跃轨迹没有阻挡时，可以向任意方向跳到同高或不同高度（最多高一格）的方块上。`max_block_jump_distance` 限制最远跳跃距离，另外不会超过疾跑跳能跨过的距离（最远 4 格，即间隔 3 格）。从梯子顶部边缘起跳时距离更短：跳到同高或更低的方块最远 3 格，跳到高一格的方块最远 2 格。只要身体不碰到岩浆，就可以跳过岩浆。
+- 木门、铜门、活板门和栅栏门视为可以打开。铁门和铁活板门在以下情况可以通过：玩家这一侧有真正能激活这扇门的按钮、拉杆或压力板（开关直接贴着门，或者装在一个贴着门的实心方块上；更长的红石线路不会追踪）；或者门已经打开并且门板没有挡住去路。如果铁门开着，但只有另一侧有按钮或压力板，会当作关闭处理，因为它很快会重新关上。路线不会让玩家在铁门门口里跳跃。站在木门里时，路线可以使用卡门跳：关上门卡在门里，跳上门顶，再从门顶跳到其他方块（和梯子顶一样，门顶边缘很窄，同高最远跳 3 格，高一格最远 2 格）。
+- 只有在行走、跳跃和攀爬都无法到达时，才会建议破坏方块。路线后面的部分会把已经破坏的方块当作不存在，不会再依赖让玩家破坏掉的方块。
 - 水下寻路的效果与地图设计有关，建议在自己的地图上多测试。
 
 ---
@@ -161,7 +164,7 @@ path_refresh_ticks: 30
 `./scripts/build-fatjar.sh` 生成的主要文件位于：
 
 ```text
-.gradle-build/libs/PathFinder-1.8.0-all.jar
+.gradle-build/libs/PathFinder-1.9.0-all.jar
 ```
 
 脚本从 `.gradle-build/libs/*-all.jar` 中找到最终文件，所以文件名会跟随 `build.gradle` 里声明的版本号。
@@ -250,7 +253,7 @@ RELEASE_COPY=1 ./scripts/build-fatjar.sh
    }
 
    dependencies {
-       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.8.0'
+       compileOnly 'com.github.TOC-Project-Team:PathFinder-source:1.9.0'
    }
    ```
 
@@ -267,12 +270,12 @@ RELEASE_COPY=1 ./scripts/build-fatjar.sh
    <dependency>
        <groupId>com.github.TOC-Project-Team</groupId>
        <artifactId>PathFinder-source</artifactId>
-       <version>1.8.0</version>
+       <version>1.9.0</version>
        <scope>provided</scope>
    </dependency>
    ```
 
-   也可以把发布的 jar 放进项目，使用 `compileOnly files('libs/PathFinder-1.8.0-all.jar')`。
+   也可以把发布的 jar 放进项目，使用 `compileOnly files('libs/PathFinder-1.9.0-all.jar')`。
 
 3. 获取 API 实例：
 
