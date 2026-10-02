@@ -10,7 +10,6 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.world.WorldUnloadEvent;
 import org.momu.pathfinder.api.event.PathFinderNavigationStopEvent.StopReason;
 import org.momu.pathfinder.config.Messages;
@@ -20,10 +19,10 @@ import org.momu.pathfinder.navigation.session.ActiveNavigation;
 import org.momu.pathfinder.navigation.session.NavigationTracker;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Ends navigations when the player (or their target) can no longer continue: death, spectator mode, leaving,
@@ -31,10 +30,12 @@ import java.util.UUID;
  */
 public final class PlayerLifecycleListener implements Listener {
     private static final long RESUME_DELAY_TICKS = 20L;
+    /** How often to look whether a dead target has respawned. */
+    private static final long RESPAWN_CHECK_TICKS = 10L;
 
     private final NavigationTracker tracker = NavigationTracker.getInstance();
-    /** Dead player -> players who were following them. */
-    private final Map<UUID, List<UUID>> followersOfDead = new HashMap<>();
+    /** Dead player -> players who were following them. Written and read on different region threads on Folia. */
+    private final Map<UUID, List<UUID>> followersOfDead = new ConcurrentHashMap<>();
 
     @EventHandler
     @SuppressWarnings("deprecation")
@@ -65,17 +66,28 @@ public final class PlayerLifecycleListener implements Listener {
             }
         }
         if (!followers.isEmpty()) {
-            followersOfDead.put(dead.getUniqueId(), followers);
+            UUID deadId = dead.getUniqueId();
+            followersOfDead.put(deadId, followers);
+            Scheduling.runGlobalLater(() -> awaitRespawn(deadId), RESPAWN_CHECK_TICKS);
         }
     }
 
-    @EventHandler
-    public void onRespawn(PlayerRespawnEvent event) {
-        UUID respawnedId = event.getPlayer().getUniqueId();
-        if (!followersOfDead.containsKey(respawnedId)) {
+    /**
+     * Resumes the followers once the dead player is alive again, or forgets them if the player left. Checks
+     * repeatedly instead of listening for the respawn because Folia does not fire {@code PlayerRespawnEvent}.
+     */
+    private void awaitRespawn(UUID deadId) {
+        if (!followersOfDead.containsKey(deadId)) {
             return;
         }
-        Scheduling.runLater(() -> resumeFollowers(respawnedId), RESUME_DELAY_TICKS);
+        Player dead = Bukkit.getPlayer(deadId);
+        if (dead == null) {
+            followersOfDead.remove(deadId);
+        } else if (NavigationTracker.isDead(dead)) {
+            Scheduling.runGlobalLater(() -> awaitRespawn(deadId), RESPAWN_CHECK_TICKS);
+        } else {
+            Scheduling.runGlobalLater(() -> resumeFollowers(deadId), RESUME_DELAY_TICKS);
+        }
     }
 
     @SuppressWarnings("deprecation")

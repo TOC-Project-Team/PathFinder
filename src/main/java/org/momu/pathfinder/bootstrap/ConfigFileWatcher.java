@@ -1,6 +1,7 @@
 package org.momu.pathfinder.bootstrap;
 
 import org.momu.pathfinder.config.LanguageManager;
+import org.momu.pathfinder.navigation.runtime.Scheduling;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -19,7 +20,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Reloads the configuration when {@code config.yml}, {@code pathfinder.yml} or a {@code lang/*.yml} file is
- * edited on disk. Watches on a background thread and reloads on the main thread one second after the change.
+ * edited on disk. Watches on a background thread and reloads on the global region thread (the main thread on
+ * Paper) one second after the change.
  */
 final class ConfigFileWatcher {
     /** Editors often write a file several times in a row; changes this close together trigger one reload. */
@@ -125,7 +127,7 @@ final class ConfigFileWatcher {
         lastChangeMillis.put(fileName, now);
 
         plugin.getLogger().info(message("messages.config-change-detected", fileName));
-        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+        Scheduling.runGlobalLater(() -> {
             try {
                 plugin.getLogger().info(LanguageManager.getInstance().getString("messages.reloading-config"));
                 plugin.reloadConfigurations();

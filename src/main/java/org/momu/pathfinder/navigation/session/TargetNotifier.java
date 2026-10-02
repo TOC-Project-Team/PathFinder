@@ -5,8 +5,8 @@ import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
-import org.momu.pathfinder.bootstrap.PathFinderPlugin;
 import org.momu.pathfinder.config.Messages;
+import org.momu.pathfinder.navigation.runtime.Scheduling;
 
 /**
  * Tells a player that someone started or stopped navigating to them, with a chat message and a boss bar
@@ -33,6 +33,8 @@ final class TargetNotifier {
         bossBar.addPlayer(target);
         bossBar.setVisible(true);
         target.sendMessage("§a" + text);
-        Bukkit.getScheduler().runTaskLater(PathFinderPlugin.getInstance(), bossBar::removeAll, BOSS_BAR_TICKS);
+        if (Scheduling.runGlobalLater(bossBar::removeAll, BOSS_BAR_TICKS) == null) {
+            bossBar.removeAll();
+        }
     }
 }

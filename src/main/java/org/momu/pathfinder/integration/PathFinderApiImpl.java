@@ -90,7 +90,7 @@ public final class PathFinderApiImpl implements PathFinderAPI {
         if (player == null || !player.isOnline()) {
             return NavigationResult.PLAYER_OFFLINE;
         }
-        if (target == null || !target.isOnline() || target.isDead()
+        if (target == null || !target.isOnline() || NavigationTracker.isDead(target)
                 || target.getGameMode() == GameMode.SPECTATOR || target.getUniqueId().equals(player.getUniqueId())) {
             return NavigationResult.TARGET_UNAVAILABLE;
         }

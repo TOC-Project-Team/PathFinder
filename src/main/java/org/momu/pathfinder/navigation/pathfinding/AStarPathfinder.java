@@ -71,27 +71,38 @@ public final class AStarPathfinder {
     private boolean goalObstructed;
     private boolean goalUnderwater;
 
-    private AStarPathfinder(Location start, Location goal) {
+    private AStarPathfinder(Location start, Location goal, BlockSource source) {
         this.start = start;
         this.goalX = goal.getBlockX();
         this.goalY = goal.getBlockY();
         this.goalZ = goal.getBlockZ();
         this.world = start.getWorld();
-        this.terrain = new TerrainView(world);
+        this.terrain = new TerrainView(world, source);
     }
 
     /**
-     * Finds a path between two locations in the same world.
+     * Finds a path between two locations in the same world, reading the live world. On Folia, call it only on the
+     * thread that owns the region around {@code start}.
      *
      * @return the path from start to goal (or to the closest reachable point), never empty
      */
     public static List<PathNode> findPath(Location start, Location goal) {
+        return findPath(start, goal, null);
+    }
+
+    /**
+     * Same as {@link #findPath(Location, Location)}, but reads blocks from {@code snapshot} (if not {@code null})
+     * instead of the live world, so it can run off the server threads on Folia.
+     */
+    public static List<PathNode> findPath(Location start, Location goal, TerrainSnapshot snapshot) {
         if (start.getWorld() == null || !start.getWorld().equals(goal.getWorld())) {
             List<PathNode> path = new ArrayList<>(1);
-            path.add(new PathNode(start.getBlock().getLocation(), null, 0, 0, MoveType.HORIZONTAL));
+            path.add(new PathNode(new Location(start.getWorld(), start.getBlockX(), start.getBlockY(),
+                    start.getBlockZ()), null, 0, 0, MoveType.HORIZONTAL));
             return path;
         }
-        return new AStarPathfinder(start, goal).search();
+        BlockSource source = snapshot != null ? snapshot : new LiveBlockSource(start.getWorld());
+        return new AStarPathfinder(start, goal, source).search();
     }
 
     private List<PathNode> search() {
@@ -119,7 +130,7 @@ public final class AStarPathfinder {
             current.closed = true;
 
             if (isGoal(current)) {
-                return PathPostProcessor.buildPath(current);
+                return PathPostProcessor.buildPath(current, terrain);
             }
             long dx = current.x - sx, dy = current.y - sy, dz = current.z - sz;
             if (dx * dx + dy * dy + dz * dz > maxRadiusSquared) {
@@ -127,7 +138,7 @@ public final class AStarPathfinder {
             }
             expand(current);
         }
-        return PathPostProcessor.buildPath(closestToGoal());
+        return PathPostProcessor.buildPath(closestToGoal(), terrain);
     }
 
     private boolean isGoal(PathNode node) {

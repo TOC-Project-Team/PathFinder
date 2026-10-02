@@ -18,19 +18,18 @@ final class TerrainView {
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, -1, 0 }
     };
 
-    final World world;
     final int minY;
     final int maxY;
+    private final BlockSource source;
     private final BlockMap<TerrainCell> cells = new BlockMap<>(8192);
     private final BlockMap<Stand> stands = new BlockMap<>(4096);
-    private final BlockFlagCache loadedChunks = new BlockFlagCache(64);
     /** Buttons, levers and pressure plates powering each iron door block that was looked at. */
     private final BlockMap<int[]> activatorsByDoor = new BlockMap<>(16);
 
-    TerrainView(World world) {
-        this.world = world;
+    TerrainView(World world, BlockSource source) {
         this.minY = world.getMinHeight();
         this.maxY = world.getMaxHeight();
+        this.source = source;
     }
 
     TerrainCell cell(int x, int y, int z) {
@@ -64,26 +63,7 @@ final class TerrainView {
         if (y >= maxY) {
             return TerrainCell.AIR;
         }
-        if (!isChunkLoaded(x >> 4, z >> 4)) {
-            return TerrainCell.UNLOADED;
-        }
-        return TerrainCell.of(world.getBlockAt(x, y, z));
-    }
-
-    private boolean isChunkLoaded(int chunkX, int chunkZ) {
-        long key = BlockKey.of(chunkX, 0, chunkZ);
-        byte cached = loadedChunks.get(key);
-        if (cached != BlockFlagCache.MISSING) {
-            return cached == 2;
-        }
-        boolean loaded;
-        try {
-            loaded = world.isChunkLoaded(chunkX, chunkZ);
-        } catch (Throwable ignored) {
-            loaded = false;
-        }
-        loadedChunks.put(key, loaded ? (byte) 2 : (byte) 1);
-        return loaded;
+        return source.cell(x, y, z);
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -201,7 +181,7 @@ final class TerrainView {
             return bx == sx && bz == sz && by == sy - 1;
         }
         try {
-            BlockData data = world.getBlockAt(sx, sy, sz).getBlockData();
+            BlockData data = source.blockData(sx, sy, sz);
             if (!(data instanceof FaceAttachable attachable)) {
                 return false;
             }

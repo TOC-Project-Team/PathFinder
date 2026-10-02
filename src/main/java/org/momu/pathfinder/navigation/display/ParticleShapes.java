@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 import org.momu.pathfinder.config.PathfinderConfig;
 import org.momu.pathfinder.navigation.pathfinding.BlockTypes;
+import org.momu.pathfinder.navigation.runtime.Scheduling;
 
 /**
  * Dust particle shapes drawn for a single player: dots, lines, block outlines and jump arcs.
@@ -80,7 +81,7 @@ public final class ParticleShapes {
             return null;
         }
         Location adjusted = location.clone();
-        if (!BlockTypes.isWater(adjusted.getBlock())) {
+        if (!Scheduling.isLoaded(adjusted) || !BlockTypes.isWater(adjusted.getBlock())) {
             return adjusted;
         }
         while (adjusted.getBlockY() < adjusted.getWorld().getMaxHeight() - 1) {

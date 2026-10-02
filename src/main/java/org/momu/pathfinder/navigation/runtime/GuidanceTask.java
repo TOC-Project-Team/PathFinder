@@ -1,5 +1,6 @@
 package org.momu.pathfinder.navigation.runtime;
 
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
@@ -7,8 +8,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import org.momu.pathfinder.api.NavigationSession;
 import org.momu.pathfinder.api.NavigationType;
@@ -21,22 +20,26 @@ import org.momu.pathfinder.navigation.display.PathRenderer;
 import org.momu.pathfinder.navigation.locate.StrongholdLocator;
 import org.momu.pathfinder.navigation.pathfinding.AStarPathfinder;
 import org.momu.pathfinder.navigation.pathfinding.PathNode;
+import org.momu.pathfinder.navigation.pathfinding.TerrainSnapshot;
 import org.momu.pathfinder.navigation.session.ActiveNavigation;
 import org.momu.pathfinder.navigation.session.NavigationTracker;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Guides one player to their navigation target. Every {@code path_refresh_ticks} it:
  * <ol>
- *     <li>checks on the main thread that the navigation and its target are still valid (stopping it with a
+ *     <li>checks on the player's thread that the navigation and its target are still valid (stopping it with a
  *     message otherwise),</li>
- *     <li>searches a path off the main thread,</li>
- *     <li>back on the main thread, updates the action bar, detects arrival, or draws the path.</li>
+ *     <li>searches a path off the main thread (on Folia, which only lets the region that owns a block read it,
+ *     the search reads copies of the chunks, see {@link TerrainSnapshot}),</li>
+ *     <li>back on the player's thread, updates the action bar, detects arrival, or draws the path.</li>
  * </ol>
+ * The player's thread is the main thread on Paper and the thread of the region that owns the player on Folia.
  */
-public final class GuidanceTask extends BukkitRunnable {
+public final class GuidanceTask implements Consumer<ScheduledTask> {
     private static final double ARRIVAL_DISTANCE = 3.0;
     /** Within this distance of a stronghold, the exact end portal frame is looked up. */
     private static final double PORTAL_FRAME_LOOKUP_DISTANCE = 300.0;
@@ -48,6 +51,10 @@ public final class GuidanceTask extends BukkitRunnable {
     private final NavigationTracker tracker = NavigationTracker.getInstance();
     private boolean pathSearchRunning;
     private boolean portalFrameSearchRunning;
+    /** The end portal frame the stronghold navigation was moved to, if any. */
+    private Location portalFrame;
+    private volatile ScheduledTask task;
+    private volatile boolean cancelled;
 
     private GuidanceTask(Player player, NavigationType type) {
         this.player = player;
@@ -57,10 +64,10 @@ public final class GuidanceTask extends BukkitRunnable {
 
     /**
      * Starts guidance for the player's current navigation on the next tick, replacing any running guidance.
-     * Callers set the navigation in {@link NavigationTracker} first.
+     * Callers set the navigation in {@link NavigationTracker} first. Can be called from any thread.
      */
     public static void start(Player player) {
-        Scheduling.runSync(() -> {
+        Scheduling.runFor(player, () -> {
             NavigationTracker tracker = NavigationTracker.getInstance();
             UUID playerId = player.getUniqueId();
             // The navigation may have been stopped, or the player may have left, before this ran.
@@ -72,7 +79,7 @@ public final class GuidanceTask extends BukkitRunnable {
                 return;
             }
             NavigationTasks.getInstance().cancelGuidance(playerId);
-            BukkitTask task = Scheduling.runTimer(new GuidanceTask(player, navigation.type()), 0L,
+            ScheduledTask task = Scheduling.runForTimer(player, new GuidanceTask(player, navigation.type()), 1L,
                     PathfinderConfig.PATH_REFRESH_TICKS);
             if (task != null && Scheduling.isPluginEnabled()) {
                 NavigationTasks.getInstance().setGuidance(playerId, task);
@@ -103,7 +110,25 @@ public final class GuidanceTask extends BukkitRunnable {
     }
 
     @Override
-    public void run() {
+    public void accept(ScheduledTask scheduledTask) {
+        task = scheduledTask;
+        run();
+    }
+
+    private void cancel() {
+        cancelled = true;
+        ScheduledTask current = task;
+        if (current != null) {
+            current.cancel();
+        }
+    }
+
+    private boolean isCancelled() {
+        ScheduledTask current = task;
+        return cancelled || (current != null && current.isCancelled());
+    }
+
+    private void run() {
         if (!Scheduling.isPluginEnabled()) {
             cancel();
             return;
@@ -131,10 +156,11 @@ public final class GuidanceTask extends BukkitRunnable {
         Location goal = WaterLanding.adjustTarget(pathGoal(target));
         Location from = toBlock(player.getLocation());
         boolean airborne = Airborne.isAirborne(player);
+        TerrainSnapshot snapshot = Scheduling.isFolia() && !airborne ? TerrainSnapshot.around(from) : null;
         pathSearchRunning = true;
         Scheduling.runAsync(() -> {
-            List<PathNode> path = airborne ? null : AStarPathfinder.findPath(from, goal);
-            Scheduling.runSync(() -> {
+            List<PathNode> path = airborne ? null : AStarPathfinder.findPath(from, goal, snapshot);
+            Scheduling.runFor(player, () -> {
                 pathSearchRunning = false;
                 showFrame(target, path);
             });
@@ -146,11 +172,16 @@ public final class GuidanceTask extends BukkitRunnable {
      * longer be reached.
      */
     private Location resolveTarget(ActiveNavigation navigation) {
+        if (navigation.type() != NavigationType.PLAYER && !player.getWorld().equals(navigation.location().getWorld())) {
+            // Normally handled by PlayerLifecycleListener, but Folia does not fire PlayerChangedWorldEvent.
+            return stopWorldChanged();
+        }
         return switch (navigation.type()) {
             case PLAYER -> resolvePlayerTarget(navigation.targetPlayer());
             case BEACON -> {
                 Location beacon = navigation.location().clone();
-                if (beacon.getBlock().getType() != Material.BEACON) {
+                // A beacon in an unloaded chunk cannot be checked without loading it; assume it is still there.
+                if (Scheduling.isLoaded(beacon) && beacon.getBlock().getType() != Material.BEACON) {
                     stopUnavailable(ChatColor.RED, "messages.target-beacon-disappear");
                     yield null;
                 }
@@ -171,7 +202,7 @@ public final class GuidanceTask extends BukkitRunnable {
         if (target.getGameMode() == GameMode.SPECTATOR) {
             return stopUnavailable(ChatColor.YELLOW, "messages.target-spectator");
         }
-        if (target.isDead()) {
+        if (NavigationTracker.isDead(target)) {
             return stopUnavailable(ChatColor.YELLOW, "messages.target-dead");
         }
         if (!player.getWorld().equals(target.getWorld())) {
@@ -188,6 +219,14 @@ public final class GuidanceTask extends BukkitRunnable {
         player.sendMessage(color + Messages.get(player, messageKey));
         cancel();
         tracker.stopNavigation(playerId, StopReason.TARGET_UNAVAILABLE);
+        return null;
+    }
+
+    @SuppressWarnings("deprecation")
+    private Location stopWorldChanged() {
+        player.sendMessage(ChatColor.YELLOW + Messages.get(player, "messages.navigation-stopped"));
+        cancel();
+        tracker.stopNavigation(playerId, StopReason.WORLD_CHANGED);
         return null;
     }
 
@@ -213,7 +252,7 @@ public final class GuidanceTask extends BukkitRunnable {
     }
 
     // ---------------------------------------------------------------------------------------------------------
-    // Main-thread frame
+    // Frame, on the player's thread
     // ---------------------------------------------------------------------------------------------------------
 
     @SuppressWarnings("deprecation")
@@ -228,7 +267,7 @@ public final class GuidanceTask extends BukkitRunnable {
         if (type == NavigationType.PLAYER) {
             ActiveNavigation navigation = tracker.getActive(playerId);
             Player targetPlayer = navigation == null ? null : Bukkit.getPlayer(navigation.targetPlayer());
-            if (targetPlayer != null && targetPlayer.isDead()) {
+            if (targetPlayer != null && NavigationTracker.isDead(targetPlayer)) {
                 tracker.stopNavigation(playerId, StopReason.TARGET_UNAVAILABLE);
                 player.sendMessage(ChatColor.YELLOW + Messages.get(player, "messages.target-dead"));
                 return;
@@ -256,7 +295,10 @@ public final class GuidanceTask extends BukkitRunnable {
                 case BEACON -> targetName = Messages.get(player, "messages.beacon-block");
                 case STRONGHOLD -> {
                     Location stronghold = navigation.location();
-                    boolean atFrame = stronghold.getBlock().getType() == Material.END_PORTAL_FRAME;
+                    // A frame in an unloaded chunk cannot be checked without loading it; trust the one we found.
+                    boolean atFrame = Scheduling.isLoaded(stronghold)
+                            ? stronghold.getBlock().getType() == Material.END_PORTAL_FRAME
+                            : stronghold.equals(portalFrame);
                     if (!atFrame && player.getLocation().distance(stronghold) < PORTAL_FRAME_LOOKUP_DISTANCE) {
                         lookUpPortalFrame(stronghold);
                         return;
@@ -286,7 +328,7 @@ public final class GuidanceTask extends BukkitRunnable {
             return;
         }
         portalFrameSearchRunning = true;
-        StrongholdLocator.findNearestPortalFrameAsync(stronghold, PORTAL_FRAME_SEARCH_RADIUS, frame -> {
+        StrongholdLocator.findNearestPortalFrameAsync(player, stronghold, PORTAL_FRAME_SEARCH_RADIUS, frame -> {
             portalFrameSearchRunning = false;
             if (!Scheduling.isPluginEnabled() || isCancelled()) {
                 return;
@@ -296,6 +338,7 @@ public final class GuidanceTask extends BukkitRunnable {
                 tracker.stopNavigation(playerId, StopReason.TARGET_UNAVAILABLE);
                 return;
             }
+            portalFrame = frame;
             tracker.refineStrongholdTarget(playerId, frame);
             player.sendMessage("§e" + Messages.get(player, "messages.end-portal-frame-coords",
                     frame.getBlockX(), frame.getBlockY(), frame.getBlockZ()));

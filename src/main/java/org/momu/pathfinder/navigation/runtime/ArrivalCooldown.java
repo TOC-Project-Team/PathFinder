@@ -28,7 +28,7 @@ final class ArrivalCooldown {
         }
         long expiry = now + COOLDOWN_MILLIS;
         cooldownUntil.put(playerId, expiry);
-        Scheduling.runLater(() -> cooldownUntil.remove(playerId, expiry), CLEANUP_DELAY_TICKS);
+        Scheduling.runLaterAsync(() -> cooldownUntil.remove(playerId, expiry), CLEANUP_DELAY_TICKS);
         return true;
     }
 }

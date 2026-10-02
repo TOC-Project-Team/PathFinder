@@ -20,10 +20,11 @@ public final class WaterLanding {
 
     /**
      * If the target is in water, returns a better target: a dry spot nearby, else the water surface above it,
-     * else a dry spot on the rings around it. Targets outside water are returned unchanged.
+     * else a dry spot on the rings around it. Targets outside water, or in chunks that are not loaded, are
+     * returned unchanged. Must run on a thread that may read the target's blocks (the main thread on Paper).
      */
     public static Location adjustTarget(Location target) {
-        if (!BlockTypes.isWater(target.getBlock())) {
+        if (!Scheduling.isLoaded(target) || !BlockTypes.isWater(target.getBlock())) {
             return target;
         }
         Location nearby = findSafeLandingNearWater(target);
@@ -55,7 +56,7 @@ public final class WaterLanding {
                         continue;
                     }
                     Location candidate = target.clone().add(dx, 0.0, dz);
-                    if (!BlockTypes.isWater(candidate.getBlock()) && isSafeLanding(candidate)) {
+                    if (isSafeLanding(candidate) && !BlockTypes.isWater(candidate.getBlock())) {
                         return candidate;
                     }
                 }
@@ -104,9 +105,12 @@ public final class WaterLanding {
         return null;
     }
 
-    /** Whether a player fits at this spot (doors, ladders and scaffolding count as open) on solid ground. */
+    /**
+     * Whether a player fits at this spot (doors, ladders and scaffolding count as open) on solid ground. Spots in
+     * chunks that are not loaded never count.
+     */
     public static boolean isSafeLanding(Location location) {
-        if (location == null) {
+        if (location == null || !Scheduling.isLoaded(location)) {
             return false;
         }
         Block feet = location.getBlock();

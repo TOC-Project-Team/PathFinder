@@ -6,9 +6,9 @@ import org.momu.pathfinder.config.LanguageManager;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Settings that survive restarts, stored in {@code playerdata.yml}: which players hide their location from
@@ -17,8 +17,8 @@ import java.util.UUID;
 final class NavigationPreferences {
     private static final String FILE_NAME = "playerdata.yml";
 
-    private final Set<UUID> hiddenPlayers = new HashSet<>();
-    private boolean navigationEnabled = true;
+    private final Set<UUID> hiddenPlayers = ConcurrentHashMap.newKeySet();
+    private volatile boolean navigationEnabled = true;
 
     boolean isHidden(UUID playerId) {
         return hiddenPlayers.contains(playerId);
@@ -56,7 +56,7 @@ final class NavigationPreferences {
         navigationEnabled = yaml.getBoolean("navigationEnabled", true);
     }
 
-    void save(JavaPlugin plugin) {
+    synchronized void save(JavaPlugin plugin) {
         if (plugin == null) {
             return;
         }

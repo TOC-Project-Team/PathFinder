@@ -9,9 +9,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.text.MessageFormat;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -31,11 +31,12 @@ public class LanguageManager {
 
     private final JavaPlugin plugin;
     /** Messages in the server default language. */
-    private FileConfiguration defaultMessages;
-    private String defaultLanguage = LanguageFiles.FALLBACK;
-    private final Map<UUID, String> playerLanguages = new HashMap<>();
+    private volatile FileConfiguration defaultMessages;
+    private volatile String defaultLanguage = LanguageFiles.FALLBACK;
+    // Messages are looked up from every region thread on Folia, so these maps are shared between threads.
+    private final Map<UUID, String> playerLanguages = new ConcurrentHashMap<>();
     /** Loaded message files for languages players have chosen. */
-    private final Map<String, FileConfiguration> loadedLanguages = new HashMap<>();
+    private final Map<String, FileConfiguration> loadedLanguages = new ConcurrentHashMap<>();
     private FileConfiguration playerLanguagesFile;
 
     private LanguageManager(JavaPlugin plugin) {
@@ -65,8 +66,12 @@ public class LanguageManager {
 
     /** Loads the default language named in config.yml, if it changed since the last load. */
     public void loadLanguage() {
+        loadLanguage(false);
+    }
+
+    private synchronized void loadLanguage(boolean force) {
         String configured = plugin.getConfig().getString("language", LanguageFiles.FALLBACK);
-        if (configured.equals(defaultLanguage) && defaultMessages != null) {
+        if (!force && configured.equals(defaultLanguage) && defaultMessages != null) {
             return;
         }
         boolean languageChanged = !configured.equals(defaultLanguage);
@@ -139,13 +144,13 @@ public class LanguageManager {
 
     /** Re-reads all language files, first adding keys that newer versions of PathFinder introduced. */
     public void reloadLanguage() {
-        defaultMessages = null;
         loadedLanguages.clear();
         int synced = syncAllLanguageFiles();
         if (synced > 0) {
             plugin.getLogger().info("Language files updated during reload: " + synced + " files synchronized");
         }
-        loadLanguage();
+        // The old messages stay in use until the new ones are loaded, for lookups from other threads.
+        loadLanguage(true);
     }
 
     public String getCurrentLanguage() {
@@ -184,7 +189,7 @@ public class LanguageManager {
         }
     }
 
-    private void savePlayerLanguages() {
+    private synchronized void savePlayerLanguages() {
         if (playerLanguagesFile == null) {
             return;
         }
@@ -199,7 +204,7 @@ public class LanguageManager {
         }
     }
 
-    private void loadLanguageFile(String language) {
+    private synchronized void loadLanguageFile(String language) {
         if (loadedLanguages.containsKey(language)) {
             return;
         }
